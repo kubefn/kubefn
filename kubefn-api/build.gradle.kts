@@ -1,7 +1,7 @@
 // kubefn-api: The function author contract. TINY, stable, zero heavy deps.
 //
-// Published to Maven Central via Sonatype:
-//   implementation("com.kubefn:kubefn-api:0.3.0")
+// Published to Maven Central via Sonatype OSSRH:
+//   implementation("com.kubefn:kubefn-api:0.3.1")
 
 plugins {
     `java-library`
@@ -75,11 +75,11 @@ publishing {
     }
 
     repositories {
-        // Maven Central via Sonatype OSSRH
+        // Sonatype OSSRH (legacy endpoint — works with standard maven-publish)
         maven {
-            name = "MavenCentral"
-            val releasesUrl = uri("https://central.sonatype.com/api/v1/publisher/upload")
-            val snapshotsUrl = uri("https://central.sonatype.com/api/v1/publisher/upload")
+            name = "OSSRH"
+            val releasesUrl = uri("https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/")
+            val snapshotsUrl = uri("https://s01.oss.sonatype.org/content/repositories/snapshots/")
             url = if (version.toString().endsWith("SNAPSHOT")) snapshotsUrl else releasesUrl
 
             credentials {
@@ -88,7 +88,7 @@ publishing {
             }
         }
 
-        // GitHub Packages (backup)
+        // GitHub Packages
         maven {
             name = "GitHubPackages"
             url = uri("https://maven.pkg.github.com/kubefn/kubefn")
@@ -100,9 +100,7 @@ publishing {
     }
 }
 
-// GPG signing — required for Maven Central
 signing {
-    // Use GPG key from environment (CI) or local gpg agent
     val signingKey = System.getenv("GPG_SIGNING_KEY")
     val signingPassword = System.getenv("GPG_SIGNING_PASSWORD")
     if (signingKey != null) {
@@ -111,7 +109,6 @@ signing {
     sign(publishing.publications["mavenJava"])
 }
 
-// Only sign when publishing (not during local builds)
 tasks.withType<Sign> {
     onlyIf { gradle.taskGraph.hasTask("publish") }
 }

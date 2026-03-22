@@ -35,13 +35,13 @@ jobs:
       - name: Build shadow JAR
         run: ./gradlew :kubefn-runtime:shadowJar
 
-      - name: Publish kubefn-api to Maven Central
+      - name: Publish kubefn-api to Sonatype OSSRH
         env:
           SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
           SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
           GPG_SIGNING_KEY: ${{ secrets.GPG_SIGNING_KEY }}
           GPG_SIGNING_PASSWORD: ${{ secrets.GPG_SIGNING_PASSWORD }}
-        run: ./gradlew :kubefn-api:publishMavenJavaPublicationToMavenCentralRepository
+        run: ./gradlew :kubefn-api:publishMavenJavaPublicationToOSSRHRepository
 
       - name: Publish to GitHub Packages
         env:
