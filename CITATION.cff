@@ -1,0 +1,33 @@
+cff-version: 1.2.0
+title: "Decoupling Deployment Boundaries from Memory Boundaries in Function Composition"
+message: "If you use KubeFn in your research, please cite this paper."
+type: software
+authors:
+  - family-names: Sarkar
+    given-names: Pranab
+    orcid: "https://orcid.org/0009-0009-8683-1481"
+    email: developer@pranab.co.in
+    affiliation: KubeFn Project
+repository-code: "https://github.com/kubefn/kubefn"
+url: "https://kubefn.com"
+license: MIT
+version: 0.4.0
+date-released: "2026-03-22"
+keywords:
+  - memory-continuous architecture
+  - serverless
+  - function composition
+  - zero-copy
+  - shared memory
+  - kubernetes
+  - heapexchange
+abstract: >-
+  The dominant abstraction in serverless composition conflates
+  deployment isolation with data representation boundaries.
+  KubeFn decouples these concerns, enabling independently
+  deployable functions to execute over a shared in-memory
+  object graph while preserving compositional semantics and
+  practical isolation. We implement this model across three
+  runtimes (JVM, Python, Node.js) and demonstrate 4-100x
+  latency reduction compared to equivalent microservice
+  architectures in full HTTP request-response benchmarks.

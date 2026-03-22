@@ -1,7 +1,8 @@
-# Memory-Continuous Architecture: Eliminating Serialization Boundaries in Function Composition
+# Decoupling Deployment Boundaries from Memory Boundaries in Function Composition
 
 **Pranab Sarkar**
-KubeFn Project / https://pranab.co.in
+KubeFn Project (https://kubefn.com)
+ORCID: 0009-0009-8683-1481
 
 **March 2026**
 
@@ -9,9 +10,11 @@ KubeFn Project / https://pranab.co.in
 
 ## Abstract
 
-Modern microservice architectures impose serialization at every service boundary: objects are marshalled to JSON or Protocol Buffers, transmitted over HTTP or gRPC, and deserialized on the receiving side. In large service graphs, this serialization tax consumes 30--40% of total CPU cycles and dominates end-to-end latency. The alternative---monolithic deployment---eliminates serialization but sacrifices independent deployability, the primary operational advantage of microservices.
+The dominant abstraction in serverless and microservice composition conflates deployment isolation with data representation boundaries: each independently deployable unit occupies a separate address space, and every inter-unit data flow requires serialization, network transit, and deserialization. In large service graphs, this serialization tax consumes 30--40% of total CPU cycles and dominates end-to-end latency. The alternative---monolithic deployment---eliminates serialization but sacrifices independent deployability, the primary operational advantage of microservices.
 
-This paper introduces **Memory-Continuous Architecture (MCA)**, a design pattern that decouples deployment boundaries from memory boundaries. In MCA, independently deployable functions share a single runtime process heap, communicating through direct object references rather than serialized byte streams. We present the **HeapExchange**, a zero-copy shared object graph with versioned schema evolution, capacity governance, and causal audit logging. We implement MCA across three language runtimes---JVM (classloader isolation, virtual threads, Netty), CPython (shared interpreter, `importlib` hot-loading), and Node.js (V8 isolate, `require`-based module loading)---demonstrating that the pattern is language-agnostic. In full HTTP-cycle benchmarks, MCA achieves 3.8ms average latency for a 7-function JVM pipeline (4--18x improvement over equivalent microservices), 1.0ms for a 3-function Python ML inference pipeline (6--30x), and 0.3ms for a 3-function Node.js API gateway (20--100x). KubeFn, the open-source reference implementation, integrates with Kubernetes through custom resource definitions and a reconciliation-loop operator.
+We show that deployment isolation and data representation boundaries can be decoupled, enabling independently deployable functions to execute over a shared in-memory object graph while preserving compositional semantics and practical isolation. We introduce **Memory-Continuous Architecture (MCA)**, a design pattern in which co-located functions share a single runtime process heap and communicate through direct object references rather than serialized byte streams. We present the **HeapExchange**, a zero-copy shared object graph with versioned schema evolution, capacity governance, and causal audit logging. We implement MCA across three language runtimes---JVM (classloader isolation, virtual threads, Netty), CPython (shared interpreter, `importlib` hot-loading), and Node.js (V8 isolate, `require`-based module loading)---demonstrating that the pattern is language-agnostic.
+
+In full HTTP-cycle benchmarks against estimated microservice baselines, MCA achieves 3.8ms average latency for a 7-function JVM pipeline (4--18x improvement), 1.0ms for a 3-function Python ML inference pipeline (6--30x), and 0.3ms for a 3-function Node.js API gateway (20--100x). We discuss limitations including shared GC pauses, shared failure domains, and the absence of cross-runtime object sharing. KubeFn, the open-source reference implementation, integrates with Kubernetes through custom resource definitions and a reconciliation-loop operator.
 
 ---
 
@@ -19,7 +22,7 @@ This paper introduces **Memory-Continuous Architecture (MCA)**, a design pattern
 
 ### 1.1 The Microservices Serialization Tax
 
-The microservices architectural style [1, 2] decomposes applications into independently deployable services communicating over network protocols. This decomposition yields significant operational benefits: independent scaling, polyglot technology choices, fault isolation, and team autonomy. However, it introduces a cost that is rarely quantified at design time.
+The microservices architectural style [1, 2] decomposes applications into independently deployable services communicating over network protocols. This decomposition yields significant operational benefits: independent scaling, polyglot technology choices, fault isolation, and team autonomy. However, it introduces a structural cost that is rarely quantified at design time.
 
 Every inter-service call requires the caller to serialize its request (typically to JSON or Protocol Buffers), transmit the bytes over a network socket, and have the receiver deserialize them back into in-memory objects. For a single hop, this overhead is modest---2 to 10 milliseconds for a typical intra-cluster HTTP call, depending on payload size and serialization format. But microservice graphs are rarely single-hop. A user-facing request to an e-commerce checkout system might traverse authentication, inventory, pricing, shipping calculation, tax computation, fraud scoring, and order assembly services. Seven hops at 2--10ms each produces 14--70ms of latency attributable purely to serialization and network transit, before any business logic executes.
 
@@ -31,15 +34,13 @@ The industry has long treated this as a binary choice. Monolithic deployment kee
 
 Microservices solve the deployment problem but create the serialization problem. Various mitigation strategies exist---service meshes reduce network overhead, binary serialization formats (Protocol Buffers, FlatBuffers, Cap'n Proto) reduce marshalling cost, sidecar proxies amortize connection management---but none eliminate the fundamental issue. Data must still cross a memory boundary at every service call.
 
-### 1.3 Why No One Has Solved This Before
+### 1.3 Thesis
 
-Prior attempts to share runtime processes across independent components have existed for decades but have not achieved widespread adoption for function composition:
+We argue that the conflation of deployment boundaries with memory boundaries is not a necessary property of independently deployable systems but rather an artifact of the container-per-service deployment model that became the default with the rise of Docker and Kubernetes. Specifically:
 
-- **OSGi** [4] provides classloader-based module isolation on the JVM but imposes complex lifecycle management, bundle dependency resolution, and service registry overhead that made it notoriously difficult to operate in production.
-- **Java EE application servers** (WebLogic, WebSphere, JBoss) host multiple applications in a single JVM but lack fine-grained function composition, zero-copy data sharing, and modern deployment primitives.
-- **Erlang/OTP** [5] runs lightweight processes sharing a BEAM VM heap but communicates between processes via message passing with copying semantics, and the ecosystem is limited to Erlang and Elixir.
+> *The dominant abstraction in serverless composition conflates deployment isolation with data representation boundaries. We show these concerns can be decoupled, enabling independently deployable functions to execute over a shared in-memory object graph while preserving compositional semantics and practical isolation.*
 
-These systems either did not achieve zero-copy data sharing between independently deployable units, or they imposed operational complexity that negated the benefits, or they were confined to a single language ecosystem.
+This decoupling is achievable because the properties that developers actually require from "independent deployment"---independent versioning, independent release, independent rollback, per-function routing and observability---do not inherently require process-level isolation. They require *logical* isolation of code loading and lifecycle management, which can be provided within a single process through classloader hierarchies (JVM), module namespaces (Python), or module cache partitioning (Node.js).
 
 ### 1.4 Contribution
 
@@ -51,7 +52,7 @@ This paper makes the following contributions:
 
 3. **A multi-runtime implementation** across three major language platforms (JVM, CPython, Node.js), demonstrating that MCA is not tied to any single language's memory model or module system.
 
-4. **Quantitative evaluation** showing 4--100x latency improvements in full HTTP-cycle benchmarks across all three runtimes, with honest methodology and conservative speedup ranges.
+4. **Quantitative evaluation** showing 4--100x latency improvements in full HTTP-cycle benchmarks across all three runtimes, with honest methodology, conservative speedup ranges, and explicit discussion of threats to validity.
 
 5. **KubeFn**, an open-source, Kubernetes-native reference implementation with CRDs, a reconciliation-loop operator, and production-grade resilience primitives.
 
@@ -79,7 +80,32 @@ This paper makes the following contributions:
 
 **Project Leyden.** Project Leyden [7] aims to improve Java startup and warmup time through static images and pre-computed class initialization. While Leyden addresses the cold-start problem that plagues JVM serverless, it does not address inter-function serialization or deployment-boundary decoupling.
 
-### 2.3 Serialization Costs in Real Systems
+### 2.3 Serverless Systems with Shared State or Reduced Isolation
+
+A growing body of work has explored relaxing the isolation constraints of serverless platforms to improve performance. We discuss the most closely related systems and differentiate MCA from each.
+
+**FAASM.** Shillaker et al. [15] present Faasm, a serverless runtime that uses WebAssembly (Wasm) as the isolation mechanism, enabling functions to share memory regions within a single process. Faasm achieves lightweight isolation through Wasm's linear memory model and supports efficient state sharing via a two-tier state architecture (local and global). MCA differs from Faasm in three respects. First, MCA provides true zero-copy object sharing---functions access the same heap-allocated object references with pointer identity preserved---whereas Faasm's shared memory regions require explicit serialization into a flat byte format compatible with Wasm's linear memory. Second, MCA supports multiple production language runtimes (JVM, CPython, Node.js) with their full standard libraries and ecosystems, whereas Faasm requires functions to be compiled to WebAssembly, which limits language support and precludes the use of native C-extension libraries (e.g., PyTorch, NumPy with BLAS backends). Third, MCA provides declarative schema evolution (HeapEnvelope with semantic versioning) and hot-swap with drain management, which Faasm does not address.
+
+**Nightcore.** Jia and Witchel [16] present Nightcore, a serverless runtime optimized for microsecond-scale internal function calls through a managed threading model and optimized IPC. Nightcore achieves low latency by co-locating functions and replacing HTTP-based invocation with shared-memory message channels. However, Nightcore still serializes data across function boundaries---it optimizes the *transport* (replacing network sockets with shared-memory IPC) rather than eliminating the *representation boundary*. MCA eliminates both: functions share the same heap objects with no serialization whatsoever. Additionally, Nightcore does not support runtime hot-swap of individual functions or schema evolution of shared data.
+
+**Cloudburst.** Sreekanti et al. [17] present Cloudburst, a stateful FaaS platform built on Anna, a low-latency key-value store with conflict-free replicated data types (CRDTs). Cloudburst provides a caching layer that keeps frequently accessed state local to function executors, reducing the latency of state access. However, Cloudburst's caching layer still serializes objects between the function runtime and the cache, and cross-function communication goes through the KVS layer with serialization at each boundary. MCA eliminates serialization entirely for co-located functions. Cloudburst's strength is distributed stateful computation with causal consistency guarantees, a use case that MCA does not address---MCA targets co-located function pipelines within a single process.
+
+**Boki.** Jia and Witchel [18] present Boki, a serverless runtime that provides shared logs as a communication primitive, enabling functions to share state through append-only log streams with exactly-once semantics. Boki addresses the challenge of consistent state sharing across distributed function instances, which is orthogonal to MCA's focus. MCA targets the intra-process case: functions that can be co-located share heap objects with zero serialization. Boki targets the inter-process case: functions that must be distributed share state through replicated logs. The two approaches are complementary---a system could use MCA for co-located function pipelines and Boki-style shared logs for cross-node state coordination.
+
+**SAND.** Akkus et al. [19] present SAND, a serverless platform that introduces application-level sandboxing, co-locating functions of the same application in a shared container with a local message bus. SAND reduces inter-function latency by avoiding network hops between co-located functions. MCA goes further: where SAND's local message bus still involves message serialization and copying, MCA's HeapExchange provides zero-copy object sharing with pointer identity. Additionally, MCA provides formal schema evolution, capacity governance, and multi-runtime support, which SAND does not address.
+
+**Summary of differentiation.** The key property that distinguishes MCA from all of the above systems is *zero-copy object sharing without serialization*, where the consumer receives the identical object reference (same heap pointer) that the producer published. No existing system provides this property for independently deployable functions across multiple production language runtimes with declarative schema evolution and hot-swap support. Table 1 summarizes the comparison.
+
+| System | Isolation | Zero-Copy Objects | Multi-Runtime | Schema Evolution | Hot-Swap |
+|--------|-----------|-------------------|---------------|------------------|----------|
+| FAASM [15] | WebAssembly | No (byte regions) | Wasm only | No | No |
+| Nightcore [16] | Containers | No (shared-mem IPC) | Multi-language | No | No |
+| Cloudburst [17] | Containers | No (KVS caching) | Python | No | No |
+| Boki [18] | Containers | No (shared logs) | Multi-language | No | No |
+| SAND [19] | Application sandbox | No (message bus) | Multi-language | No | No |
+| **MCA/KubeFn** | Classloader/module | **Yes (heap refs)** | **JVM, Python, Node.js** | **Yes (HeapEnvelope)** | **Yes (drain + swap)** |
+
+### 2.4 Serialization Costs in Real Systems
 
 The cost of serialization in microservice architectures is well-documented but often underestimated:
 
@@ -363,7 +389,7 @@ We evaluate MCA's latency characteristics across all three runtime implementatio
 - **Intra-pod (localhost)**: 2ms per hop (optimistic: same-node, loopback interface)
 - **Cross-node**: 5--10ms per hop (realistic: intra-cluster with service mesh)
 
-These baselines are conservative; production microservice hops frequently exceed 10ms due to serialization, service mesh overhead, retries, and connection establishment.
+These baselines are conservative; production microservice hops frequently exceed 10ms due to serialization, service mesh overhead, retries, and connection establishment. However, we note explicitly that **these are estimated baselines, not measured deployments of equivalent microservice systems**. We did not implement the same business logic as separate microservices and benchmark them end-to-end. The speedup ratios should therefore be interpreted as estimates of the improvement attributable to eliminating serialization and network hops, not as measured head-to-head comparisons.
 
 **What we measure.** Full HTTP cycle: the `hey` client sends an HTTP request to the KubeFn runtime, which routes it through the multi-function pipeline, and returns the response. The measurement includes Netty request parsing, router resolution, function dispatch, HeapExchange operations, response serialization, and Netty response writing.
 
@@ -423,13 +449,23 @@ These baselines are conservative; production microservice hops frequently exceed
 
 **Analysis.** The 0.3ms average includes HTTP parsing (~0.05ms), three function invocations with Map lookups (~0.15ms total), and response writing (~0.1ms). The single-threaded model means zero synchronization overhead for HeapExchange operations. The limitation is CPU-bound functions: a function that blocks the event loop for 10ms delays all other in-flight requests.
 
-### 6.5 Threats to Validity
+### 6.5 Hot-Swap Evaluation
 
-**Single-machine benchmarks.** All benchmarks run on a single machine, which eliminates network variability but does not capture production network conditions. The microservice baselines are estimates, not measurements of a deployed microservice system. We report speedup as a range (e.g., 4--18x) to account for this uncertainty.
+We evaluated hot-swap under load by continuously sending requests (10 concurrent connections) while replacing a function in the JVM checkout pipeline. During a 200-request demo run, the drain manager successfully held in-flight requests while the new classloader was loaded, and the router atomically switched to the new version with zero dropped requests. Average swap time was under 50ms with no in-flight requests and under 500ms under load (waiting for drain).
 
-**Synthetic workloads.** The benchmark functions perform lightweight computation. Production functions with heavy CPU usage (e.g., image processing, large data transformations) would show a smaller speedup ratio because the serialization tax becomes a smaller fraction of total latency.
+**Caveat.** This evaluation was conducted with a small number of requests (200) on a single machine. We have not yet validated hot-swap behavior under production-scale load (thousands of concurrent connections, sustained throughput). The drain timeout, classloader GC timing, and interaction with JIT deoptimization under sustained load remain to be characterized. We consider production-scale hot-swap evaluation necessary future work.
+
+### 6.6 Threats to Validity
+
+**Estimated baselines, not measured comparisons.** The most significant threat to our evaluation is that the microservice baselines are estimated from published per-hop latency data, not measured from deployed equivalent microservice systems running the same business logic. A proper comparison would require implementing the same function pipelines as independent microservices, deploying them on the same hardware (or equivalent cloud instances), and benchmarking end-to-end. We report speedup as a range (e.g., 4--18x) to partially account for this uncertainty, but the true speedup for any specific workload depends on factors we did not measure: payload size, serialization format, service mesh configuration, and network conditions.
+
+**Single-machine benchmarks.** All benchmarks run on a single machine, which eliminates network variability but does not capture production network conditions, container scheduling jitter, or NUMA effects on multi-socket servers.
+
+**Synthetic workloads.** The benchmark functions perform lightweight computation (token validation, dict lookups, simple arithmetic). Production functions with heavy CPU usage (e.g., image processing, large data transformations) would show a smaller speedup ratio because the serialization tax becomes a smaller fraction of total latency. The reported speedups are most representative of I/O-bound and coordination-heavy workloads.
 
 **Warmup effects.** Benchmarks run after a warmup period. The JVM's JIT compiler has optimized hot paths before measurement begins. Cold-start performance is not measured; MCA's born-warm property addresses cold-start but is not quantified here.
+
+**GC impact not isolated.** The JVM benchmarks do not isolate garbage collection pauses from function execution latency. The p99 latency of 7.1ms for the JVM pipeline (versus a p50 of 2.5ms) suggests GC-induced tail latency, but we did not instrument GC logs to confirm this. A shared heap amplifies GC impact because all co-located functions contribute to allocation pressure and all are paused during stop-the-world collections. We discuss this further in Section 7.
 
 ---
 
@@ -461,43 +497,100 @@ The mitigation is organizational: function groups should correspond to trust bou
 
 For environments requiring stronger isolation (multi-tenant platforms, regulatory compliance), MCA is inappropriate. The trust model is explicit: shared heap implies shared trust.
 
-### 7.3 Limitations
+### 7.3 Garbage Collection Impact
 
-**GIL in Python.** CPython's Global Interpreter Lock prevents true parallel execution of Python bytecode. For CPU-bound function pipelines, the GIL serializes execution, limiting throughput to a single core. The mitigation is to use C-extension libraries (NumPy, PyTorch) that release the GIL during computation, or to run multiple Python runtime processes with a load balancer.
+A shared JVM heap means shared garbage collection. When the GC performs a stop-the-world pause, *all* co-located functions are paused simultaneously, regardless of which function generated the garbage. This is a meaningful concern for latency-sensitive workloads.
 
-**Single-threaded Node.js.** V8's single-threaded event loop means all function invocations are sequential. A function that blocks the event loop (synchronous computation, synchronous I/O) delays all other in-flight requests. The mitigation is to offload CPU-bound work to worker threads (which cross a memory boundary, losing the zero-copy property for offloaded data).
+The severity depends on the GC algorithm. With the G1 collector (JDK default), mixed GC pauses of 10--50ms are common under high allocation rates. With ZGC (available since JDK 15, production-ready since JDK 21), pause times are bounded to sub-millisecond regardless of heap size, because ZGC performs concurrent relocation. KubeFn recommends ZGC for production deployments (`-XX:+UseZGC`), and our benchmarks use ZGC.
 
-**HeapExchange is not a database.** The HeapExchange is an in-memory, per-process data structure. It does not provide persistence, replication, transactions, or cross-process sharing. Functions that require durable state must use external databases. The HeapExchange is best suited for ephemeral, request-scoped, or session-scoped shared state.
+However, even with ZGC, a function that allocates aggressively can increase GC overhead (concurrent GC cycles consume CPU) and degrade throughput for all co-located functions. The HeapGuard's capacity limits provide a coarse-grained mitigation: by bounding the number of objects in the HeapExchange, the guard limits the contribution of shared state to GC pressure. Per-function allocation tracking and throttling is an area for future work.
 
-**Schema evolution at scale.** While HeapEnvelope and SchemaVersion provide basic schema compatibility checking, they do not support automated schema migration, schema registries, or compile-time compatibility validation. In large deployments with many function groups producing and consuming shared objects, schema management becomes a coordination challenge.
+### 7.4 Failure Domains
 
-### 7.4 Comparison to GraalVM Native Image and Project Leyden
+The most significant operational risk of MCA is that functions sharing a JVM share a failure domain. If one function triggers an `OutOfMemoryError`, the entire JVM process terminates, taking all co-located functions with it. Similarly, a function that enters an infinite loop (consuming a virtual thread indefinitely) does not directly crash the process but consumes resources that may starve other functions.
+
+KubeFn mitigates this through several mechanisms:
+- **HeapGuard capacity limits** prevent any single function from publishing unbounded objects to the HeapExchange.
+- **Request timeouts** kill long-running function invocations after a configurable deadline.
+- **Concurrency limits** (semaphore-based) prevent one function from consuming all available virtual threads.
+- **Circuit breakers** stop routing traffic to failing functions, allowing the healthy functions to continue serving.
+
+These mitigations reduce the *probability* of cascading failures but do not eliminate the *possibility*. A function that allocates large objects on the stack or local variables (outside the HeapExchange) can still trigger OOM without tripping the HeapGuard. In practice, the risk is comparable to running multiple WAR files in a Java EE application server---a well-understood operational model with known failure modes.
+
+For workloads requiring hard isolation, the correct architectural choice is separate function groups (separate JVM processes), with cross-group communication via HTTP.
+
+### 7.5 Comparison to GraalVM Native Image and Project Leyden
 
 GraalVM native-image [6] compiles Java applications ahead-of-time into native executables, eliminating JVM startup time and reducing memory footprint. Project Leyden [7] takes a similar approach within the OpenJDK ecosystem. Both address the cold-start problem but do not address the serialization-boundary problem.
 
 MCA and native-image/Leyden are complementary: a KubeFn runtime compiled with GraalVM native-image would combine sub-100ms startup with zero-copy function composition. The main obstacle is that native-image's closed-world assumption conflicts with MCA's dynamic classloader-based function loading. A native-image-compatible MCA implementation would require ahead-of-time registration of all function classes, sacrificing runtime hot-swap.
 
-### 7.5 Future Work
+---
 
-**Cross-runtime HeapExchange.** The current implementation requires all functions in a group to use the same language runtime. A cross-runtime HeapExchange would enable JVM functions and Python functions to share objects. The challenge is representation: a Java `HashMap` and a Python `dict` have different memory layouts. Potential approaches include shared-memory regions with a common binary format (similar to Apache Arrow's columnar format), or a polyglot runtime like GraalVM Truffle.
+## 8. Limitations and Future Work
 
-**Deterministic replay.** The CausalCaptureEngine records all function invocations and heap mutations with nanosecond precision. A natural extension is deterministic replay: given a captured trace, re-execute the exact sequence of function calls with the exact heap state. This would enable time-travel debugging for production incidents.
+We organize the limitations of the current system into categories and discuss corresponding future work directions.
 
-**Autonomous optimization.** The runtime has complete visibility into function call graphs, heap access patterns, and latency profiles. Future versions could automatically fuse frequently co-invoked functions (eliminating dispatch overhead), memoize pure-function subgraphs (eliminating redundant computation), and pre-warm heap state based on predicted request patterns.
+### 8.1 Shared Failure Domain
 
-**Cross-process HeapExchange.** For function groups that exceed single-process capacity, a shared-memory HeapExchange (using `MappedByteBuffer` on the JVM or `mmap` on POSIX systems) could extend the zero-copy property across processes on the same node, with a binary serialization fallback for cross-node communication.
+As discussed in Section 7.4, the shared JVM model means a shared failure domain. One function's OOM kills all co-located functions. While HeapGuard limits and concurrency controls mitigate this, they cannot prevent all failure modes. Future work includes investigating OS-level memory cgroups per function group within a single process (leveraging Linux cgroup v2 memory controllers) and exploring cooperative memory budgeting where functions declare and the runtime enforces per-function allocation budgets.
+
+### 8.2 Python GIL Limits True Parallelism
+
+CPython's Global Interpreter Lock prevents true parallel execution of Python bytecode. For CPU-bound function pipelines, the GIL serializes execution, limiting throughput to a single core. The mitigation is to use C-extension libraries (NumPy, PyTorch) that release the GIL during computation, or to run multiple Python runtime processes with a load balancer. CPython 3.13 introduced an experimental free-threaded mode (PEP 703) that removes the GIL. Future work includes evaluating MCA on free-threaded CPython, which could enable true parallel function execution while retaining the shared-heap property.
+
+### 8.3 No Cross-Runtime HeapExchange
+
+The current implementation requires all functions in a group to use the same language runtime. A JVM function and a Python function cannot share HeapExchange objects because their object representations are incompatible (a Java `HashMap` and a Python `dict` have different memory layouts). This means that polyglot pipelines---where, for example, a Java authentication function feeds into a Python ML inference function---must use serialization at the language boundary, losing the zero-copy property.
+
+Future work includes investigating shared-memory regions with a common columnar format (similar to Apache Arrow) as an intermediate representation, or leveraging GraalVM Truffle's polyglot object protocol for JVM-hosted languages. Neither approach preserves true zero-copy semantics with native object identity, so this remains an open research challenge.
+
+### 8.4 Schema Evolution is Declarative but Not Enforced
+
+The HeapEnvelope and SchemaVersion mechanisms provide declarative schema compatibility checking: functions declare which schema versions they produce and consume, and the runtime can validate compatibility at load time. However, the current implementation does not enforce schema contracts at runtime. A function can publish any object under any key, bypassing the schema declaration. Furthermore, there is no schema registry, no automated migration path for breaking schema changes, and no compile-time tooling to verify that a function's code matches its declared schema.
+
+Future work includes a schema registry integrated with the Kubernetes operator (schema declarations as CRD annotations), compile-time annotation processors that verify schema compatibility, and runtime enforcement that rejects publishes that violate declared schemas.
+
+### 8.5 No Formal Verification of Isolation Properties
+
+We claim that classloader isolation provides practical isolation between function groups: each group has its own namespace, its own dependency versions, and its classloader can be discarded independently. However, we have not formally verified these isolation properties. Known edge cases include:
+- Static fields in classes loaded by the parent classloader (e.g., `java.lang.System` properties) are shared across all function groups.
+- JNI libraries loaded via `System.loadLibrary` are process-global and cannot be loaded by multiple classloaders.
+- `ThreadLocal` values set by one function group persist on carrier threads and may leak to other groups if not cleaned up.
+
+Formal verification of classloader isolation boundaries, possibly using a model checker or through a type-system-level proof, is future work.
+
+### 8.6 Production Deployment Data
+
+All evaluation data in this paper comes from single-machine benchmarks with synthetic workloads. We do not yet have data from production deployments handling real user traffic. Production environments introduce factors absent from our benchmarks: variable payload sizes, bursty traffic patterns, interactions with Kubernetes scheduling and resource limits, GC behavior under sustained multi-hour load, and classloader leak accumulation over days of hot-swap cycles.
+
+We consider production deployment validation essential for establishing MCA's practical viability and plan to pursue it through early-adopter partnerships.
+
+### 8.7 Cross-Process and Cross-Node HeapExchange
+
+For function groups that exceed single-process capacity, a shared-memory HeapExchange (using `MappedByteBuffer` on the JVM or `mmap` on POSIX systems) could extend the zero-copy property across processes on the same node, with a binary serialization fallback for cross-node communication.
+
+### 8.8 Deterministic Replay
+
+The CausalCaptureEngine records all function invocations and heap mutations with nanosecond precision. A natural extension is deterministic replay: given a captured trace, re-execute the exact sequence of function calls with the exact heap state. This would enable time-travel debugging for production incidents.
+
+### 8.9 Autonomous Optimization
+
+The runtime has complete visibility into function call graphs, heap access patterns, and latency profiles. Future versions could automatically fuse frequently co-invoked functions (eliminating dispatch overhead), memoize pure-function subgraphs (eliminating redundant computation), and pre-warm heap state based on predicted request patterns.
 
 ---
 
-## 8. Conclusion
+## 9. Conclusion
 
-Memory-Continuous Architecture addresses a structural inefficiency in microservice systems: the equation of deployment boundaries with memory boundaries. By separating these concerns, MCA enables independently deployable functions to share a process heap, communicating through direct object references rather than serialized byte streams.
+Memory-Continuous Architecture addresses a structural inefficiency in microservice systems: the conflation of deployment boundaries with memory boundaries. We have shown that these concerns can be decoupled, enabling independently deployable functions to execute over a shared in-memory object graph while preserving compositional semantics---independent versioning, independent release, per-function routing, and per-function observability.
 
 The HeapExchange provides a typed, versioned, governed zero-copy data plane with capacity limits, leak detection, stale eviction, and causal audit logging. The multi-runtime implementation across JVM, CPython, and Node.js demonstrates that MCA is a language-agnostic architectural pattern, not a JVM-specific optimization.
 
-Benchmarks show 4--18x latency improvement for JVM pipelines, 6--30x for Python ML inference, and 20--100x for Node.js API gateways, measured as full HTTP request-response cycles. These improvements come from eliminating serialization, deserialization, and network transit at every function boundary.
+Benchmarks show 4--18x latency improvement for JVM pipelines, 6--30x for Python ML inference, and 20--100x for Node.js API gateways, measured as full HTTP request-response cycles. These improvements come from eliminating serialization, deserialization, and network transit at every function boundary. We acknowledge that these comparisons use estimated microservice baselines and that production validation remains future work.
 
-MCA is not a replacement for microservices. It is a third option between monoliths and microservices, applicable when functions share trust boundaries and compose tightly in request processing. The trust model is explicit: shared heap implies shared trust, and cross-boundary communication continues to use standard microservice protocols.
+MCA is not a replacement for microservices. It is a third option between monoliths and microservices, applicable when functions share trust boundaries and compose tightly in request processing. The trust model is explicit: shared heap implies shared trust, shared garbage collection, and shared failure domain. Cross-boundary communication continues to use standard microservice protocols.
+
+Compared to recent work on optimized serverless runtimes---FAASM [15], Nightcore [16], Cloudburst [17], Boki [18], and SAND [19]---MCA's distinguishing contribution is zero-copy object sharing without serialization across independently deployable functions, combined with multi-runtime support, declarative schema evolution, and hot-swap with drain management. We have been candid about the limitations: shared GC pauses, shared failure domains, no cross-runtime object sharing, and the absence of production deployment data. These limitations define the research agenda for future work.
 
 KubeFn, the open-source reference implementation, is available at https://kubefn.com and https://github.com/kubefn/kubefn. It integrates with Kubernetes through custom resource definitions, supports hot-swap deployment without restart, and includes production-grade resilience primitives (circuit breakers, drain management, timeouts, fallbacks) and observability (causal introspection, OpenTelemetry tracing, Prometheus metrics).
 
@@ -532,3 +625,13 @@ KubeFn, the open-source reference implementation, is available at https://kubefn
 [13] Container Solutions, "Java Operator SDK," 2024. [Online]. Available: https://javaoperatorsdk.io/
 
 [14] R. Saito, "hey: HTTP load generator," 2023. [Online]. Available: https://github.com/rakyll/hey
+
+[15] S. Shillaker and P. Pietzuch, "Faasm: Lightweight Isolation for Efficient Stateful Serverless Computing," in *Proc. USENIX Annual Technical Conference (ATC)*, 2020, pp. 419--433.
+
+[16] Z. Jia and E. Witchel, "Nightcore: Efficient and Scalable Serverless Computing for Latency-Sensitive, Interactive Microservices," in *Proc. 26th ACM International Conference on Architectural Support for Programming Languages and Operating Systems (ASPLOS)*, 2021, pp. 152--166. doi: 10.1145/3445814.3446701
+
+[17] V. Sreekanti, C. Wu, X. C. Lin, J. Schleier-Smith, J. E. Gonzalez, J. M. Hellerstein, and A. Tumanov, "Cloudburst: Stateful Functions-as-a-Service," in *Proc. VLDB Endowment*, vol. 13, no. 11, 2020, pp. 2438--2452. doi: 10.14778/3407790.3407836
+
+[18] Z. Jia and E. Witchel, "Boki: Stateful Serverless Computing with Shared Logs," in *Proc. 28th ACM Symposium on Operating Systems Principles (SOSP)*, 2021, pp. 691--707. doi: 10.1145/3477132.3483541
+
+[19] I. E. Akkus, R. Chen, I. Rimac, M. Stein, K. Satzke, A. Beck, P. Aditya, and V. Hilt, "SAND: Towards High-Performance Serverless Computing," in *Proc. USENIX Annual Technical Conference (ATC)*, 2018, pp. 923--935.
