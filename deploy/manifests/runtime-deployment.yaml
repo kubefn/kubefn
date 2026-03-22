@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubefn-runtime
+  namespace: kubefn
+  labels:
+    app.kubernetes.io/name: kubefn-runtime
+    app.kubernetes.io/component: runtime
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kubefn-runtime
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kubefn-runtime
+        app.kubernetes.io/component: runtime
+    spec:
+      containers:
+        - name: runtime
+          image: harbor.mycluster.cyou/library/kubefn-runtime:latest
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: admin
+              containerPort: 8081
+              protocol: TCP
+          env:
+            - name: KUBEFN_PORT
+              value: "8080"
+            - name: KUBEFN_ADMIN_PORT
+              value: "8081"
+            - name: KUBEFN_FUNCTIONS_DIR
+              value: /var/kubefn/functions
+            - name: KUBEFN_MAX_CONCURRENCY_PER_GROUP
+              value: "256"
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: admin
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: admin
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          # Functions are baked into the image for demo.
+          # In production, use ConfigMap/PVC mounts or the operator.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kubefn-runtime
+  namespace: kubefn
+  labels:
+    app.kubernetes.io/name: kubefn-runtime
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+    - name: admin
+      port: 8081
+      targetPort: admin
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: kubefn-runtime

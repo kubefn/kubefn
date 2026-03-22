@@ -1,0 +1,65 @@
+# Example: Deploy the hello-function group via ConfigMap
+# The function JAR is base64-encoded in the ConfigMap and mounted into the runtime
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hello-function-jar
+  namespace: kubefn
+  labels:
+    kubefn.io/group: hello-service
+    kubefn.io/type: function-jar
+binaryData: {}
+# Will be populated by the deploy script
+---
+# Example CRD instances (for future operator use)
+apiVersion: kubefn.io/v1alpha1
+kind: KubeFnGroup
+metadata:
+  name: hello-service
+  namespace: kubefn
+spec:
+  isolationMode: shared-jvm
+  replicas: 1
+  image: harbor.mycluster.cyou/library/kubefn-runtime:latest
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+  jvmArgs:
+    - "-Xmx1536m"
+    - "-XX:+UseZGC"
+---
+apiVersion: kubefn.io/v1alpha1
+kind: KubeFnFunction
+metadata:
+  name: greet
+  namespace: kubefn
+spec:
+  groupRef: hello-service
+  className: com.example.GreetFunction
+  route:
+    path: /greet
+    methods: ["GET", "POST"]
+  source:
+    type: configmap
+    configMapRef:
+      name: hello-function-jar
+---
+apiVersion: kubefn.io/v1alpha1
+kind: KubeFnFunction
+metadata:
+  name: echo
+  namespace: kubefn
+spec:
+  groupRef: hello-service
+  className: com.example.EchoFunction
+  route:
+    path: /echo
+    methods: ["GET"]
+  source:
+    type: configmap
+    configMapRef:
+      name: hello-function-jar

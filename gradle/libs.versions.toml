@@ -1,0 +1,32 @@
+[versions]
+java = "21"
+netty = "4.1.118.Final"
+jackson = "2.18.3"
+caffeine = "3.2.0"
+slf4j = "2.0.17"
+logback = "1.5.16"
+fabric8 = "7.2.0"
+josdk = "5.1.0"
+junit = "5.11.4"
+micrometer = "1.14.4"
+
+[libraries]
+netty-all = { module = "io.netty:netty-all", version.ref = "netty" }
+jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind", version.ref = "jackson" }
+jackson-jsr310 = { module = "com.fasterxml.jackson.datatype:jackson-datatype-jsr310", version.ref = "jackson" }
+caffeine = { module = "com.github.ben-manes.caffeine:caffeine", version.ref = "caffeine" }
+slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
+logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
+fabric8-client = { module = "io.fabric8:kubernetes-client", version.ref = "fabric8" }
+fabric8-crd-generator = { module = "io.fabric8:crd-generator-apt", version.ref = "fabric8" }
+josdk-framework = { module = "io.javaoperatorsdk:operator-framework", version.ref = "josdk" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
+micrometer-core = { module = "io.micrometer:micrometer-core", version.ref = "micrometer" }
+
+[bundles]
+jackson = ["jackson-databind", "jackson-jsr310"]
+logging = ["slf4j-api", "logback-classic"]
+testing = ["junit-jupiter"]
+
+[plugins]
+shadow = { id = "com.github.johnrengelman.shadow", version = "8.1.1" }
