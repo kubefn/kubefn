@@ -1,0 +1,17 @@
+{
+  "name": "kubefn-runtime-node",
+  "version": "0.3.1",
+  "description": "KubeFn Node.js Runtime — Memory-Continuous Architecture for JavaScript/TypeScript",
+  "main": "lib/server.js",
+  "bin": {
+    "kubefn-node": "lib/server.js"
+  },
+  "scripts": {
+    "start": "node lib/server.js",
+    "dev": "node --watch lib/server.js"
+  },
+  "keywords": ["kubefn", "faas", "functions", "shared-memory", "zero-copy"],
+  "author": "Pranab Sarkar <developer@pranab.co.in>",
+  "license": "MIT",
+  "homepage": "https://kubefn.com"
+}
