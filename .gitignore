@@ -31,3 +31,5 @@ sonatypegradle.properties
 gpg
 sonatype
 gradle.properties
+__pycache__/
+*.pyc
