@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kubefn"
+version = "0.3.1"
+description = "KubeFn Python Runtime — Memory-Continuous Architecture"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.11"
+authors = [{name = "Pranab Sarkar", email = "developer@pranab.co.in"}]
+urls = {Homepage = "https://kubefn.com", GitHub = "https://github.com/kubefn/kubefn"}
+
+[project.scripts]
+kubefn-python = "kubefn.__main__:main"
