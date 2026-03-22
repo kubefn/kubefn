@@ -34,6 +34,10 @@ dependencies {
     implementation("org.scala-lang:scala-library:2.13.16")
     implementation("org.apache.groovy:groovy:4.0.27")
 
+    // Jackson modules for polyglot serialization
+    implementation("com.fasterxml.jackson.module:jackson-module-scala_2.13:2.18.3")
+    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.18.3")
+
     testImplementation(libs.bundles.testing)
 }
 
