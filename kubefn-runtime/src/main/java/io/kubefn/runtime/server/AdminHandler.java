@@ -2,6 +2,7 @@ package io.kubefn.runtime.server;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.kubefn.runtime.heap.HeapExchangeImpl;
+import io.kubefn.runtime.metrics.KubeFnMetrics;
 import io.kubefn.runtime.resilience.FunctionCircuitBreaker;
 import io.kubefn.runtime.routing.FunctionRouter;
 import io.netty.buffer.Unpooled;
@@ -101,6 +102,8 @@ public class AdminHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
             }
 
             case "/admin/breakers" -> responseBody = circuitBreaker.allStatus();
+
+            case "/admin/metrics" -> responseBody = KubeFnMetrics.instance().snapshot();
 
             default -> {
                 status = 404;
