@@ -1,6 +1,7 @@
 package com.kubefn.operator;
 
 import io.javaoperatorsdk.operator.Operator;
+import com.kubefn.operator.reconciler.KubeFnFunctionReconciler;
 import com.kubefn.operator.reconciler.KubeFnGroupReconciler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,9 +16,10 @@ public class OperatorMain {
         try {
             Operator operator = new Operator();
             operator.register(new KubeFnGroupReconciler());
+            operator.register(new KubeFnFunctionReconciler());
             operator.start();
 
-            log.info("KubeFn Operator started, watching for KubeFnGroup resources");
+            log.info("KubeFn Operator started, watching for KubeFnGroup and KubeFnFunction resources");
 
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 log.info("Shutting down KubeFn Operator");
