@@ -136,13 +136,74 @@ public class ${className}Function implements KubeFnHandler, FnContextAware {
 }
 JAVA
 
+    # Also generate pom.xml for Maven users
+    cat > "${dir}/pom.xml" << MAVEN
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.example</groupId>
+    <artifactId>${name}</artifactId>
+    <version>1.0.0</version>
+    <packaging>jar</packaging>
+
+    <properties>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.kubefn</groupId>
+            <artifactId>kubefn-api</artifactId>
+            <version>0.1.0-SNAPSHOT</version>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.13.0</version>
+                <configuration>
+                    <release>21</release>
+                    <compilerArgs>
+                        <arg>--enable-preview</arg>
+                        <arg>-parameters</arg>
+                    </compilerArgs>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>
+MAVEN
+
     echo -e "${GREEN}Created:${NC}"
-    echo "  ${dir}/build.gradle.kts"
+    echo "  ${dir}/build.gradle.kts  (Gradle)"
+    echo "  ${dir}/pom.xml           (Maven)"
     echo "  ${dir}/src/main/java/com/example/${className}Function.java"
+    echo ""
+    echo -e "${BOLD}Dependency (add to your build):${NC}"
+    echo ""
+    echo -e "  ${CYAN}Gradle:${NC}"
+    echo '    compileOnly("io.kubefn:kubefn-api:0.1.0-SNAPSHOT")'
+    echo ""
+    echo -e "  ${CYAN}Maven:${NC}"
+    echo "    <dependency>"
+    echo "      <groupId>io.kubefn</groupId>"
+    echo "      <artifactId>kubefn-api</artifactId>"
+    echo "      <version>0.1.0-SNAPSHOT</version>"
+    echo "      <scope>provided</scope>"
+    echo "    </dependency>"
     echo ""
     echo -e "${BOLD}Next steps:${NC}"
     echo "  1. Edit ${dir}/src/main/java/com/example/${className}Function.java"
-    echo "  2. Build: cd ${dir} && gradle jar"
+    echo "  2. Build: cd ${dir} && gradle jar   (or: mvn package)"
     echo "  3. Deploy: kubefn deploy ${dir}/build/libs/${name}.jar ${group}"
 }
 
