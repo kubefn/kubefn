@@ -62,7 +62,7 @@ centralPortal {
     }
 }
 
-// Also publish to GitHub Packages
+// GitHub Packages
 publishing {
     repositories {
         maven {
@@ -76,15 +76,20 @@ publishing {
     }
 }
 
+// GPG signing — signs the centralPortal publication for Maven Central
 signing {
     val signingKey = System.getenv("GPG_SIGNING_KEY")
     val signingPassword = System.getenv("GPG_SIGNING_PASSWORD")
-    if (signingKey != null) {
+    if (!signingKey.isNullOrEmpty()) {
         useInMemoryPgpKeys(signingKey, signingPassword ?: "")
     }
-    sign(publishing.publications)
 }
 
-tasks.withType<Sign> {
-    onlyIf { gradle.taskGraph.hasTask("publish") || gradle.taskGraph.hasTask("publishToCentralPortal") }
+afterEvaluate {
+    signing {
+        val signingKey = System.getenv("GPG_SIGNING_KEY")
+        if (!signingKey.isNullOrEmpty()) {
+            sign(publishing.publications["centralPortal"])
+        }
+    }
 }
