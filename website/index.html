@@ -577,9 +577,15 @@
                         <div class="detail">7 in-memory, zero serialization</div>
                     </div>
                 </div>
-                <div style="margin-top:16px;padding:14px;background:rgba(55,118,171,0.1);border:1px solid rgba(55,118,171,0.3);border-radius:8px;text-align:center">
-                    <span style="color:#3776AB;font-weight:700;font-size:1.3rem">Python: 535x</span>
-                    <span style="color:var(--text-dim);font-size:13px;margin-left:8px">ML pipeline &middot; 3 steps in 0.084ms &middot; zero-copy inference</span>
+                <div style="margin-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                    <div style="padding:12px;background:rgba(55,118,171,0.1);border:1px solid rgba(55,118,171,0.3);border-radius:8px;text-align:center">
+                        <span style="color:#3776AB;font-weight:700;font-size:1.2rem">Python: 535x</span>
+                        <div style="color:var(--text-dim);font-size:11px;margin-top:4px">ML pipeline &middot; 0.084ms</div>
+                    </div>
+                    <div style="padding:12px;background:rgba(241,224,90,0.08);border:1px solid rgba(241,224,90,0.3);border-radius:8px;text-align:center">
+                        <span style="color:#F1E05A;font-weight:700;font-size:1.2rem">Node.js: 3,704x</span>
+                        <div style="color:var(--text-dim);font-size:11px;margin-top:4px">API gateway &middot; 0.008ms</div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -742,7 +748,11 @@
                 </div>
                 <div class="pillar" style="padding:18px;text-align:center;border-color:var(--green);">
                     <div style="font-size:1.5rem;margin-bottom:6px;font-weight:700;color:#3776AB">Python</div>
-                    <div style="font-size:12px;color:var(--text-dim)">ML pipelines &middot; Zero-copy inference</div>
+                    <div style="font-size:12px;color:var(--text-dim)">ML pipelines &middot; 535x faster</div>
+                </div>
+                <div class="pillar" style="padding:18px;text-align:center;border-color:var(--green);">
+                    <div style="font-size:1.5rem;margin-bottom:6px;font-weight:700;color:#F1E05A">Node.js</div>
+                    <div style="font-size:12px;color:var(--text-dim)">API gateways &middot; 3,704x faster</div>
                 </div>
             </div>
         </div>
