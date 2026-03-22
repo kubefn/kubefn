@@ -2,7 +2,7 @@
 // Only SLF4J API is exposed to function authors.
 //
 // Published to Maven so function authors can depend on it:
-//   implementation("io.kubefn:kubefn-api:0.2.0")
+//   implementation("com.kubefn:kubefn-api:0.2.0")
 
 plugins {
     `java-library`
@@ -17,7 +17,7 @@ dependencies {
 publishing {
     publications {
         create<MavenPublication>("mavenJava") {
-            groupId = "io.kubefn"
+            groupId = "com.kubefn"
             artifactId = "kubefn-api"
             version = project.version.toString()
 

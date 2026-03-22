@@ -5,7 +5,7 @@ plugins {
 }
 
 application {
-    mainClass.set("io.kubefn.operator.OperatorMain")
+    mainClass.set("com.kubefn.operator.OperatorMain")
 }
 
 dependencies {

@@ -1,6 +1,6 @@
 package com.enterprise.events;
 
-import io.kubefn.api.*;
+import com.kubefn.api.*;
 
 import java.time.Duration;
 import java.util.*;

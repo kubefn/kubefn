@@ -1,6 +1,6 @@
 package com.example.checkout;
 
-import io.kubefn.api.*;
+import com.kubefn.api.*;
 
 import java.util.Map;
 

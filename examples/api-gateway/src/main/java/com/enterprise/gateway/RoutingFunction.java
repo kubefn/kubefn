@@ -1,6 +1,6 @@
 package com.enterprise.gateway;
 
-import io.kubefn.api.*;
+import com.kubefn.api.*;
 
 import java.util.*;
 

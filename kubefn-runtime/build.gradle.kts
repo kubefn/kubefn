@@ -7,7 +7,7 @@ plugins {
 }
 
 application {
-    mainClass.set("io.kubefn.runtime.KubeFnMain")
+    mainClass.set("com.kubefn.runtime.KubeFnMain")
     applicationDefaultJvmArgs = listOf(
         "--enable-preview",
         "-XX:+UseZGC",

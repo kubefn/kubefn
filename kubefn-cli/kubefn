@@ -96,7 +96,7 @@ repositories {
 }
 
 dependencies {
-    compileOnly("io.kubefn:kubefn-api:0.1.0-SNAPSHOT")
+    compileOnly("com.kubefn:kubefn-api:0.1.0-SNAPSHOT")
 }
 
 tasks.withType<JavaCompile> {
@@ -110,7 +110,7 @@ GRADLE
     cat > "${dir}/src/main/java/com/example/${className}Function.java" << JAVA
 package com.example;
 
-import io.kubefn.api.*;
+import com.kubefn.api.*;
 import java.util.Map;
 
 @FnRoute(path = "/${name}", methods = {"GET", "POST"})
@@ -157,7 +157,7 @@ JAVA
 
     <dependencies>
         <dependency>
-            <groupId>io.kubefn</groupId>
+            <groupId>com.kubefn</groupId>
             <artifactId>kubefn-api</artifactId>
             <version>0.1.0-SNAPSHOT</version>
             <scope>provided</scope>
@@ -191,11 +191,11 @@ MAVEN
     echo -e "${BOLD}Dependency (add to your build):${NC}"
     echo ""
     echo -e "  ${CYAN}Gradle:${NC}"
-    echo '    compileOnly("io.kubefn:kubefn-api:0.1.0-SNAPSHOT")'
+    echo '    compileOnly("com.kubefn:kubefn-api:0.1.0-SNAPSHOT")'
     echo ""
     echo -e "  ${CYAN}Maven:${NC}"
     echo "    <dependency>"
-    echo "      <groupId>io.kubefn</groupId>"
+    echo "      <groupId>com.kubefn</groupId>"
     echo "      <artifactId>kubefn-api</artifactId>"
     echo "      <version>0.1.0-SNAPSHOT</version>"
     echo "      <scope>provided</scope>"

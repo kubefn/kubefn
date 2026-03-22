@@ -1,6 +1,6 @@
 package com.enterprise;
 
-import io.kubefn.api.*;
+import com.kubefn.api.*;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;

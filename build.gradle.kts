@@ -3,7 +3,7 @@ plugins {
 }
 
 allprojects {
-    group = "io.kubefn"
+    group = "com.kubefn"
     version = "0.1.0-SNAPSHOT"
 
     repositories {
