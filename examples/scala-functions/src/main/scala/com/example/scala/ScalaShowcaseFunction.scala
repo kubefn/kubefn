@@ -3,6 +3,7 @@ package com.example.scala
 import com.kubefn.api._
 
 import java.util.Optional
+import scala.jdk.CollectionConverters._
 
 /**
  * Orchestrator that invokes the stream processor and rule engine,
@@ -93,56 +94,30 @@ class ScalaShowcaseFunction extends KubeFnHandler with FnContextAware {
 
     // ── Read results from heap (zero-copy) ───────────────────────────
 
-    val streamResultOpt = {
-      val opt = heap.get("stream:processed", classOf[StreamProcessorFunction#StreamResult])
-      if (opt.isPresent) Some(opt.get()) else None
-    }
-
-    val rulesResultOpt = {
-      val opt = heap.get("rules:result", classOf[RuleEngineFunction#RuleEngineResult])
-      if (opt.isPresent) Some(opt.get()) else None
-    }
+    val streamResult = heap.get("stream:processed", classOf[Object])
+    val rulesResult = heap.get("rules:result", classOf[Object])
 
     val totalDurationMs = System.currentTimeMillis() - orchestrationStart
 
     log.info(s"Scala showcase completed in ${totalDurationMs}ms — ${stages.count(_.success)}/${stages.size} stages succeeded")
 
-    // ── Build response ───────────────────────────────────────────────
+    // Build response as Map for proper JSON serialization
+    val result = new java.util.LinkedHashMap[String, Object]()
+    result.put("language", "Scala")
+    result.put("group", ctx.groupName())
+    result.put("revision", ctx.revisionId())
+    result.put("streamResults", if (streamResult.isPresent) streamResult.get() else null)
+    result.put("rulesResults", if (rulesResult.isPresent) rulesResult.get() else null)
+    result.put("_meta", java.util.Map.of(
+      "pipelineSteps", Integer.valueOf(stages.size),
+      "totalTimeMs", s"${totalDurationMs}ms",
+      "stages", stages.map(s => java.util.Map.of(
+        "name", s.name, "durationMs", java.lang.Long.valueOf(s.durationMs),
+        "success", java.lang.Boolean.valueOf(s.success)
+      )).asJava,
+      "zeroCopy", java.lang.Boolean.TRUE
+    ))
 
-    val responseBody = {
-      val sb = new StringBuilder
-      sb.append("""{"showcase":"scala",""")
-      sb.append(s""""group":"${ctx.groupName()}",""")
-      sb.append(s""""revision":"${ctx.revisionId()}",""")
-
-      // Timing metadata
-      sb.append(s""""_meta":{"totalDurationMs":$totalDurationMs,"stages":[""")
-      stages.zipWithIndex.foreach { case (s, i) =>
-        if (i > 0) sb.append(",")
-        sb.append(s"""{"name":"${s.name}","durationMs":${s.durationMs},"success":${s.success},"detail":"${s.detail}"}""")
-      }
-      sb.append("]},")
-
-      // Heap summary
-      sb.append(""""heapSummary":{""")
-      sb.append(s""""streamEventsProcessed":${streamResultOpt.map(_.totalReceived).getOrElse(0)},""")
-      sb.append(s""""streamValidCount":${streamResultOpt.map(_.validCount).getOrElse(0)},""")
-      sb.append(s""""rulesEvaluated":${rulesResultOpt.map(_.totalInputs).getOrElse(0)},""")
-      sb.append(s""""rulesSummary":{${rulesResultOpt.map(_.summary.map { case (k, v) => s""""$k":$v""" }.mkString(",")).getOrElse("")}}""")
-      sb.append("},")
-
-      // Cross-language note
-      sb.append(""""crossLanguageNote":"Objects on HeapExchange are JVM references. A Kotlin or Java function in the same group can read stream:processed and rules:result zero-copy.",""")
-
-      // Inline stage responses
-      sb.append(""""results":{""")
-      sb.append(s""""streamProcessor":${streamResponse.map(_.toString).getOrElse("null")},""")
-      sb.append(s""""ruleEngine":${rulesResponse.map(_.toString).getOrElse("null")}""")
-      sb.append("}}")
-
-      sb.toString()
-    }
-
-    KubeFnResponse.ok(responseBody)
+    KubeFnResponse.ok(result)
   }
 }

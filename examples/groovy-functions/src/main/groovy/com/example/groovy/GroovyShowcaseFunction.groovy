@@ -19,12 +19,10 @@ class GroovyShowcaseFunction implements KubeFnHandler, FnContextAware {
         def configStart = System.nanoTime()
         def configFn = ctx.getFunction(ConfigFunction)
 
-        // Build a synthetic request with sample overrides
-        def configRequest = KubeFnRequest.builder()
-            .method("POST")
-            .path("/config/resolve")
-            .body("app.name=Groovy Showcase\napp.env=demo\napp.feature_flag=enabled")
-            .build()
+        // Build a synthetic request
+        def configBody = "app.name=Groovy Showcase\napp.env=demo\napp.feature_flag=enabled"
+        def configRequest = new KubeFnRequest("POST", "/config/resolve", "",
+            [:] as Map, [:] as Map, configBody.getBytes("UTF-8"))
 
         def configResponse = configFn.handle(configRequest)
         def configMs = (System.nanoTime() - configStart) / 1_000_000.0
@@ -33,11 +31,9 @@ class GroovyShowcaseFunction implements KubeFnHandler, FnContextAware {
         def scriptStart = System.nanoTime()
         def scriptFn = ctx.getFunction(ScriptRunnerFunction)
 
-        def scriptRequest = KubeFnRequest.builder()
-            .method("POST")
-            .path("/script/run")
-            .body('rule("discount") { between(42, 10, 100) ? "eligible" : "ineligible" }')
-            .build()
+        def scriptBody = 'rule("discount") { between(42, 10, 100) ? "eligible" : "ineligible" }'
+        def scriptRequest = new KubeFnRequest("POST", "/script/run", "",
+            [:] as Map, [:] as Map, scriptBody.getBytes("UTF-8"))
 
         def scriptResponse = scriptFn.handle(scriptRequest)
         def scriptMs = (System.nanoTime() - scriptStart) / 1_000_000.0
