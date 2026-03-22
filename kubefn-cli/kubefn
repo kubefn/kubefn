@@ -1,0 +1,367 @@
+#!/usr/bin/env bash
+# kubefn — CLI for the KubeFn Live Application Fabric
+# Usage: kubefn <command> [options]
+
+set -euo pipefail
+
+VERSION="0.2.0"
+RUNTIME_PORT="${KUBEFN_PORT:-8080}"
+ADMIN_PORT="${KUBEFN_ADMIN_PORT:-8081}"
+RUNTIME_HOST="${KUBEFN_HOST:-localhost}"
+FUNCTIONS_DIR="${KUBEFN_FUNCTIONS_DIR:-/tmp/kubefn-functions}"
+NAMESPACE="${KUBEFN_NAMESPACE:-kubefn}"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+banner() {
+    echo -e "${CYAN}╔════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║${BOLD}  KubeFn — Live Application Fabric     ${NC}${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}  Memory-Continuous Architecture v${VERSION} ${CYAN}║${NC}"
+    echo -e "${CYAN}╚════════════════════════════════════════╝${NC}"
+}
+
+usage() {
+    banner
+    echo ""
+    echo -e "${BOLD}Usage:${NC} kubefn <command> [options]"
+    echo ""
+    echo -e "${BOLD}Commands:${NC}"
+    echo -e "  ${GREEN}init${NC}        Scaffold a new function project"
+    echo -e "  ${GREEN}dev${NC}         Start local dev runtime with hot-reload"
+    echo -e "  ${GREEN}deploy${NC}      Deploy a function group to the runtime"
+    echo -e "  ${GREEN}functions${NC}   List deployed functions and routes"
+    echo -e "  ${GREEN}status${NC}      Show runtime status (heap, JVM, threads)"
+    echo -e "  ${GREEN}heap${NC}        Show HeapExchange metrics and objects"
+    echo -e "  ${GREEN}breakers${NC}    Show circuit breaker status"
+    echo -e "  ${GREEN}trace${NC}       Show request trace info"
+    echo -e "  ${GREEN}top${NC}         Live dashboard of runtime metrics"
+    echo -e "  ${GREEN}logs${NC}        Stream runtime logs from K8s"
+    echo -e "  ${GREEN}version${NC}     Show version"
+    echo ""
+    echo -e "${BOLD}Environment:${NC}"
+    echo "  KUBEFN_HOST        Runtime host (default: localhost)"
+    echo "  KUBEFN_PORT        Runtime HTTP port (default: 8080)"
+    echo "  KUBEFN_ADMIN_PORT  Admin port (default: 8081)"
+    echo "  KUBEFN_NAMESPACE   K8s namespace (default: kubefn)"
+    echo "  KUBEFN_FUNCTIONS_DIR  Functions directory (default: /tmp/kubefn-functions)"
+}
+
+admin_url() {
+    echo "http://${RUNTIME_HOST}:${ADMIN_PORT}"
+}
+
+runtime_url() {
+    echo "http://${RUNTIME_HOST}:${RUNTIME_PORT}"
+}
+
+check_runtime() {
+    if ! curl -sf "$(admin_url)/healthz" > /dev/null 2>&1; then
+        echo -e "${RED}Error: KubeFn runtime not reachable at $(admin_url)${NC}"
+        echo "Start it with: kubefn dev"
+        exit 1
+    fi
+}
+
+# ─── INIT ───────────────────────────────────────────────────────
+cmd_init() {
+    local name="${1:-my-function}"
+    local group="${2:-my-service}"
+
+    echo -e "${BOLD}Scaffolding function: ${GREEN}${name}${NC} in group ${CYAN}${group}${NC}"
+
+    local dir="${name}"
+    mkdir -p "${dir}/src/main/java/com/example"
+
+    # build.gradle.kts
+    cat > "${dir}/build.gradle.kts" << 'GRADLE'
+plugins {
+    java
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+repositories {
+    mavenCentral()
+    mavenLocal()
+}
+
+dependencies {
+    compileOnly("io.kubefn:kubefn-api:0.1.0-SNAPSHOT")
+}
+
+tasks.withType<JavaCompile> {
+    options.compilerArgs.addAll(listOf("-parameters", "--enable-preview"))
+}
+GRADLE
+
+    # Function template
+    local className
+    className=$(echo "${name}" | python3 -c "import sys; print(''.join(w.capitalize() for w in sys.stdin.read().strip().split('-')))")
+    cat > "${dir}/src/main/java/com/example/${className}Function.java" << JAVA
+package com.example;
+
+import io.kubefn.api.*;
+import java.util.Map;
+
+@FnRoute(path = "/${name}", methods = {"GET", "POST"})
+@FnGroup("${group}")
+public class ${className}Function implements KubeFnHandler, FnContextAware {
+    private FnContext ctx;
+
+    @Override
+    public void setContext(FnContext context) { this.ctx = context; }
+
+    @Override
+    public KubeFnResponse handle(KubeFnRequest request) throws Exception {
+        // Your function logic here
+        // Access shared heap: ctx.heap().get("key", Type.class)
+        // Call siblings: ctx.getFunction(OtherFunction.class).handle(request)
+
+        return KubeFnResponse.ok(Map.of(
+            "message", "Hello from ${name}!",
+            "group", ctx.groupName(),
+            "revision", ctx.revisionId()
+        ));
+    }
+}
+JAVA
+
+    echo -e "${GREEN}Created:${NC}"
+    echo "  ${dir}/build.gradle.kts"
+    echo "  ${dir}/src/main/java/com/example/${className}Function.java"
+    echo ""
+    echo -e "${BOLD}Next steps:${NC}"
+    echo "  1. Edit ${dir}/src/main/java/com/example/${className}Function.java"
+    echo "  2. Build: cd ${dir} && gradle jar"
+    echo "  3. Deploy: kubefn deploy ${dir}/build/libs/${name}.jar ${group}"
+}
+
+# ─── DEV ────────────────────────────────────────────────────────
+cmd_dev() {
+    local jar_path
+    jar_path=$(find "$(dirname "$0")/../kubefn-runtime/build/libs" -name "kubefn-runtime-*-all.jar" 2>/dev/null | head -1)
+
+    if [[ -z "$jar_path" ]]; then
+        echo -e "${YELLOW}Runtime JAR not found. Building...${NC}"
+        (cd "$(dirname "$0")/.." && ./gradlew :kubefn-runtime:shadowJar)
+        jar_path=$(find "$(dirname "$0")/../kubefn-runtime/build/libs" -name "kubefn-runtime-*-all.jar" | head -1)
+    fi
+
+    mkdir -p "${FUNCTIONS_DIR}"
+
+    banner
+    echo ""
+    echo -e "${GREEN}Starting local dev runtime...${NC}"
+    echo -e "  Functions dir: ${CYAN}${FUNCTIONS_DIR}${NC}"
+    echo -e "  HTTP:  ${CYAN}http://localhost:${RUNTIME_PORT}${NC}"
+    echo -e "  Admin: ${CYAN}http://localhost:${ADMIN_PORT}${NC}"
+    echo ""
+    echo -e "${YELLOW}Drop function JARs into ${FUNCTIONS_DIR}/<group>/ to hot-deploy.${NC}"
+    echo ""
+
+    KUBEFN_FUNCTIONS_DIR="${FUNCTIONS_DIR}" \
+        java --enable-preview \
+        -jar "${jar_path}"
+}
+
+# ─── DEPLOY ─────────────────────────────────────────────────────
+cmd_deploy() {
+    local jar="${1:?Usage: kubefn deploy <jar-path> <group-name>}"
+    local group="${2:?Usage: kubefn deploy <jar-path> <group-name>}"
+
+    if [[ ! -f "$jar" ]]; then
+        echo -e "${RED}Error: JAR not found: ${jar}${NC}"
+        exit 1
+    fi
+
+    local target="${FUNCTIONS_DIR}/${group}"
+    mkdir -p "${target}"
+
+    echo -e "${BOLD}Deploying${NC} ${CYAN}${jar}${NC} → group ${GREEN}${group}${NC}"
+
+    cp "${jar}" "${target}/"
+
+    echo -e "${GREEN}Deployed.${NC} The file watcher will pick it up automatically."
+    echo ""
+
+    # Wait a moment and check
+    sleep 2
+    if curl -sf "$(admin_url)/healthz" > /dev/null 2>&1; then
+        echo -e "${BOLD}Functions after deploy:${NC}"
+        cmd_functions
+    fi
+}
+
+# ─── FUNCTIONS ──────────────────────────────────────────────────
+cmd_functions() {
+    check_runtime
+    local data
+    data=$(curl -sf "$(admin_url)/admin/functions")
+
+    local count
+    count=$(echo "$data" | python3 -c "import json,sys; print(json.load(sys.stdin)['count'])" 2>/dev/null || echo "0")
+
+    echo -e "${BOLD}Deployed Functions (${count} routes):${NC}"
+    echo ""
+
+    echo "$data" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+groups = {}
+for f in d['functions']:
+    g = f['group']
+    if g not in groups:
+        groups[g] = []
+    groups[g].append(f)
+
+for group, fns in sorted(groups.items()):
+    rev = fns[0]['revision'] if fns else 'unknown'
+    print(f'  \033[1m{group}\033[0m (rev: {rev})')
+    for f in fns:
+        print(f'    {f[\"method\"]:6} {f[\"path\"]:24} → {f[\"function\"]}')
+    print()
+" 2>/dev/null
+}
+
+# ─── STATUS ─────────────────────────────────────────────────────
+cmd_status() {
+    check_runtime
+    echo -e "${BOLD}KubeFn Runtime Status${NC}"
+    echo ""
+
+    curl -sf "$(admin_url)/admin/status" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+print(f'  Version:     v{d[\"version\"]}')
+print(f'  Uptime:      {d[\"uptime_ms\"] // 1000}s')
+print(f'  Routes:      {d[\"route_count\"]}')
+print(f'  Heap:        {d[\"heap_used_mb\"]}MB / {d[\"heap_max_mb\"]}MB')
+print(f'  Threads:     {d[\"thread_count\"]}')
+print(f'  Classes:     {d[\"loaded_classes\"]}')
+print(f'  JVM:         {d[\"jvm_version\"]}')
+" 2>/dev/null
+}
+
+# ─── HEAP ───────────────────────────────────────────────────────
+cmd_heap() {
+    check_runtime
+    echo -e "${BOLD}HeapExchange — Shared Object Graph${NC}"
+    echo ""
+
+    curl -sf "$(admin_url)/admin/heap" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+print(f'  Objects:     {d[\"objectCount\"]}')
+print(f'  Publishes:   {d[\"publishCount\"]}')
+print(f'  Gets:        {d[\"getCount\"]}')
+print(f'  Hit rate:    {d[\"hitRate\"]}')
+print()
+if d.get('keys'):
+    print('  Live objects:')
+    for k in d['keys']:
+        print(f'    • {k}')
+" 2>/dev/null
+}
+
+# ─── BREAKERS ───────────────────────────────────────────────────
+cmd_breakers() {
+    check_runtime
+    echo -e "${BOLD}Circuit Breakers${NC}"
+    echo ""
+
+    curl -sf "$(admin_url)/admin/breakers" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+if not d:
+    print('  No circuit breakers active.')
+else:
+    for name, b in d.items():
+        state = b['state']
+        color = '\033[32m' if state == 'CLOSED' else '\033[31m' if state == 'OPEN' else '\033[33m'
+        print(f'  {name}:')
+        print(f'    State:     {color}{state}\033[0m')
+        print(f'    Success:   {b[\"successfulCalls\"]}')
+        print(f'    Failed:    {b[\"failedCalls\"]}')
+        print(f'    Rejected:  {b[\"notPermittedCalls\"]}')
+        print()
+" 2>/dev/null
+}
+
+# ─── TOP ────────────────────────────────────────────────────────
+cmd_top() {
+    check_runtime
+    echo -e "${BOLD}KubeFn Live Dashboard (Ctrl+C to exit)${NC}"
+    echo ""
+
+    while true; do
+        clear
+        banner
+        echo ""
+        cmd_status
+        echo ""
+        cmd_heap
+        echo ""
+        cmd_breakers
+        sleep 2
+    done
+}
+
+# ─── TRACE ──────────────────────────────────────────────────────
+cmd_trace() {
+    local request_id="${1:-}"
+    if [[ -z "$request_id" ]]; then
+        echo -e "${BOLD}Usage:${NC} kubefn trace <request-id>"
+        echo ""
+        echo "Get request IDs from the X-KubeFn-Request-Id response header:"
+        echo "  curl -v localhost:8080/greet 2>&1 | grep X-KubeFn-Request-Id"
+        exit 1
+    fi
+
+    echo -e "${BOLD}Trace: ${CYAN}${request_id}${NC}"
+    echo ""
+    echo -e "${YELLOW}Note: Full trace introspection available in v0.3${NC}"
+    echo "For now, check OpenTelemetry spans in your collector."
+}
+
+# ─── LOGS ───────────────────────────────────────────────────────
+cmd_logs() {
+    echo -e "${BOLD}Streaming logs from K8s namespace: ${CYAN}${NAMESPACE}${NC}"
+    kubectl logs -n "${NAMESPACE}" -l app.kubernetes.io/name=kubefn-runtime -f --tail=50
+}
+
+# ─── VERSION ────────────────────────────────────────────────────
+cmd_version() {
+    echo "kubefn v${VERSION}"
+}
+
+# ─── MAIN ───────────────────────────────────────────────────────
+case "${1:-}" in
+    init)       shift; cmd_init "$@" ;;
+    dev)        shift; cmd_dev "$@" ;;
+    deploy)     shift; cmd_deploy "$@" ;;
+    functions)  cmd_functions ;;
+    status)     cmd_status ;;
+    heap)       cmd_heap ;;
+    breakers)   cmd_breakers ;;
+    top)        cmd_top ;;
+    trace)      shift; cmd_trace "$@" ;;
+    logs)       cmd_logs ;;
+    version)    cmd_version ;;
+    -v|--version) cmd_version ;;
+    -h|--help|"") usage ;;
+    *)
+        echo -e "${RED}Unknown command: ${1}${NC}"
+        echo "Run 'kubefn --help' for usage."
+        exit 1
+        ;;
+esac
