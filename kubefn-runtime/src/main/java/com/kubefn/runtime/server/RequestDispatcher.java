@@ -5,6 +5,7 @@ import com.kubefn.api.KubeFnRequest;
 import com.kubefn.api.KubeFnResponse;
 import com.kubefn.runtime.config.RuntimeConfig;
 import com.kubefn.runtime.heap.HeapExchangeImpl;
+import com.kubefn.runtime.introspection.CausalCaptureEngine;
 import com.kubefn.runtime.lifecycle.DrainManager;
 import com.kubefn.runtime.lifecycle.RevisionContext;
 import com.kubefn.runtime.metrics.KubeFnMetrics;
@@ -51,13 +52,15 @@ public class RequestDispatcher extends SimpleChannelInboundHandler<FullHttpReque
     private final FunctionCircuitBreaker circuitBreaker;
     private final FallbackRegistry fallbackRegistry;
     private final DrainManager drainManager;
+    private final CausalCaptureEngine captureEngine;
     private final Map<String, Semaphore> groupSemaphores;
 
     public RequestDispatcher(FunctionRouter router, ExecutorService executor,
                              ObjectMapper objectMapper, RuntimeConfig config,
                              FunctionCircuitBreaker circuitBreaker,
                              FallbackRegistry fallbackRegistry,
-                             DrainManager drainManager) {
+                             DrainManager drainManager,
+                             CausalCaptureEngine captureEngine) {
         this.router = router;
         this.executor = executor;
         this.objectMapper = objectMapper;
@@ -65,6 +68,7 @@ public class RequestDispatcher extends SimpleChannelInboundHandler<FullHttpReque
         this.circuitBreaker = circuitBreaker;
         this.fallbackRegistry = fallbackRegistry;
         this.drainManager = drainManager;
+        this.captureEngine = captureEngine;
         this.groupSemaphores = new HashMap<>();
     }
 
@@ -170,7 +174,10 @@ public class RequestDispatcher extends SimpleChannelInboundHandler<FullHttpReque
             return;
         }
 
-        // 8. Execute with tracing, timeout, and metrics
+        // 8. Causal capture: request start
+        captureEngine.captureRequestStart(requestId, groupName, functionName, revisionId);
+
+        // 9. Execute with tracing, timeout, metrics, and causal capture
         Span span = KubeFnTracer.startFunctionSpan(groupName, functionName, revisionId, requestId);
         long startNanos = System.nanoTime();
         boolean success = false;
@@ -178,6 +185,9 @@ public class RequestDispatcher extends SimpleChannelInboundHandler<FullHttpReque
         try {
             KubeFnRequest request = new KubeFnRequest(
                     method, path, route.subPath(), headers, queryParams, body);
+
+            // Causal capture: function start
+            captureEngine.captureFunctionStart(requestId, groupName, functionName, revisionId);
 
             // Execute with timeout enforcement
             KubeFnResponse response;
@@ -206,6 +216,8 @@ public class RequestDispatcher extends SimpleChannelInboundHandler<FullHttpReque
             response.header("X-KubeFn-Group", groupName);
 
             long durationNanos = System.nanoTime() - startNanos;
+            captureEngine.captureFunctionEnd(requestId, groupName, functionName, durationNanos, null);
+            captureEngine.captureRequestEnd(requestId, durationNanos, null);
             circuitBreaker.recordSuccess(groupName, functionName, durationNanos);
             KubeFnMetrics.instance().recordInvocation(groupName, functionName, durationNanos, true);
             success = true;
@@ -214,6 +226,10 @@ public class RequestDispatcher extends SimpleChannelInboundHandler<FullHttpReque
 
         } catch (Exception e) {
             long durationNanos = System.nanoTime() - startNanos;
+            captureEngine.captureFunctionEnd(requestId, groupName, functionName, durationNanos,
+                    e.getClass().getSimpleName() + ": " + e.getMessage());
+            captureEngine.captureRequestEnd(requestId, durationNanos,
+                    e.getClass().getSimpleName() + ": " + e.getMessage());
             circuitBreaker.recordFailure(groupName, functionName, durationNanos, e);
             KubeFnMetrics.instance().recordInvocation(groupName, functionName, durationNanos, false);
             log.error("Function error: {}.{} [{}]", groupName, functionName, requestId, e);

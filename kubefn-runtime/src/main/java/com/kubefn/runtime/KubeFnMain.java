@@ -4,6 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kubefn.runtime.classloader.FunctionLoader;
 import com.kubefn.runtime.config.RuntimeConfig;
 import com.kubefn.runtime.heap.HeapExchangeImpl;
+import com.kubefn.runtime.introspection.CausalCaptureEngine;
+import com.kubefn.runtime.introspection.CausalEventRing;
+import com.kubefn.runtime.introspection.ReplayEngine;
 import com.kubefn.runtime.lifecycle.DrainManager;
 import com.kubefn.runtime.resilience.FallbackRegistry;
 import com.kubefn.runtime.resilience.FunctionCircuitBreaker;
@@ -24,20 +27,20 @@ import org.slf4j.LoggerFactory;
 import java.nio.file.Files;
 
 /**
- * KubeFn Runtime — Production-grade entry point.
- * All hardening components are wired together:
- * HeapGuard, AuditLog, DrainManager, CircuitBreaker,
- * FallbackRegistry, Metrics, Tracing, Timeout.
+ * KubeFn Runtime v0.3 — The Living Application Fabric.
+ *
+ * <p>All systems wired:
+ * HeapExchange + Guard + AuditLog, DrainManager, CircuitBreaker + Fallback,
+ * Metrics, Tracing, Timeout, Causal Introspection + Replay, Multi-Revision.
  */
 public class KubeFnMain {
 
     private static final Logger log = LoggerFactory.getLogger(KubeFnMain.class);
-
     private static EventLoopGroup adminBossGroup;
     private static EventLoopGroup adminWorkerGroup;
 
     public static void main(String[] args) throws Exception {
-        log.info("Booting KubeFn organism v0.2...");
+        log.info("Booting KubeFn organism v0.3...");
 
         RuntimeConfig config = RuntimeConfig.fromEnv();
 
@@ -47,15 +50,23 @@ public class KubeFnMain {
         FunctionCircuitBreaker circuitBreaker = new FunctionCircuitBreaker();
         FallbackRegistry fallbackRegistry = new FallbackRegistry();
         DrainManager drainManager = new DrainManager();
+
+        // Causal Introspection — the category-defining feature
+        CausalCaptureEngine captureEngine = new CausalCaptureEngine(
+                new CausalEventRing(100_000));
+        ReplayEngine replayEngine = new ReplayEngine(captureEngine, router);
+
         FunctionLoader loader = new FunctionLoader(router, heapExchange, drainManager);
 
-        // Start HTTP server with all hardening wired
+        // Start HTTP server with ALL v0.3 features wired
         NettyServer server = new NettyServer(
-                config, router, circuitBreaker, fallbackRegistry, drainManager);
+                config, router, circuitBreaker, fallbackRegistry,
+                drainManager, captureEngine);
         server.start();
 
-        // Start admin server
-        startAdminServer(config, router, server.objectMapper(), heapExchange, circuitBreaker);
+        // Start admin server with introspection endpoints + UI
+        startAdminServer(config, router, server.objectMapper(),
+                heapExchange, circuitBreaker, captureEngine, replayEngine);
 
         // Load existing functions
         if (Files.exists(config.functionsDir())) {
@@ -70,6 +81,7 @@ public class KubeFnMain {
         Thread.startVirtualThread(watcher);
 
         log.info("KubeFn organism is ALIVE. {} routes registered.", router.routeCount());
+        log.info("Trace UI: http://localhost:{}/admin/ui", config.adminPort());
         log.info("Drop function JARs into {} to deploy.", config.functionsDir());
 
         // Graceful shutdown
@@ -87,7 +99,9 @@ public class KubeFnMain {
 
     private static void startAdminServer(RuntimeConfig config, FunctionRouter router,
                                          ObjectMapper objectMapper, HeapExchangeImpl heapExchange,
-                                         FunctionCircuitBreaker circuitBreaker)
+                                         FunctionCircuitBreaker circuitBreaker,
+                                         CausalCaptureEngine captureEngine,
+                                         ReplayEngine replayEngine)
             throws InterruptedException {
         adminBossGroup = new NioEventLoopGroup(1);
         adminWorkerGroup = new NioEventLoopGroup(1);
@@ -102,7 +116,8 @@ public class KubeFnMain {
                         pipeline.addLast(new HttpServerCodec());
                         pipeline.addLast(new HttpObjectAggregator(65536));
                         pipeline.addLast(new AdminHandler(
-                                router, objectMapper, heapExchange, circuitBreaker));
+                                router, objectMapper, heapExchange, circuitBreaker,
+                                captureEngine, replayEngine));
                     }
                 });
 
