@@ -2,6 +2,7 @@ package com.kubefn.runtime.heap;
 
 import com.kubefn.api.HeapCapsule;
 import com.kubefn.api.HeapExchange;
+import com.kubefn.runtime.introspection.CausalCaptureEngine;
 import com.kubefn.runtime.metrics.KubeFnMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,6 +32,9 @@ public class HeapExchangeImpl implements HeapExchange {
     private final HeapGuard guard;
     private final HeapAuditLog auditLog;
 
+    // Causal introspection — set after construction to avoid circular dependency
+    private volatile CausalCaptureEngine captureEngine;
+
     // Counters
     private final AtomicLong publishCount = new AtomicLong(0);
     private final AtomicLong getCount = new AtomicLong(0);
@@ -48,6 +52,14 @@ public class HeapExchangeImpl implements HeapExchange {
     public HeapExchangeImpl(HeapGuard guard, HeapAuditLog auditLog) {
         this.guard = guard;
         this.auditLog = auditLog;
+    }
+
+    /**
+     * Set the causal capture engine. Called from KubeFnMain after both
+     * HeapExchange and CaptureEngine are created.
+     */
+    public void setCaptureEngine(CausalCaptureEngine engine) {
+        this.captureEngine = engine;
     }
 
     public static void setCurrentContext(String group, String function) {
@@ -87,8 +99,15 @@ public class HeapExchangeImpl implements HeapExchange {
         auditLog.recordPublish(key, type.getSimpleName(), group, function,
                 currentRevision(), version);
 
-        // Metrics
+        // Metrics + causal capture
         KubeFnMetrics.instance().recordHeapPublish();
+        if (captureEngine != null) {
+            var ctx = com.kubefn.runtime.lifecycle.RevisionContext.current();
+            String reqId = ctx != null ? ctx.requestId() : null;
+            if (reqId != null) {
+                captureEngine.captureHeapPublish(reqId, key, type.getSimpleName(), version);
+            }
+        }
 
         log.debug("HeapExchange: published '{}' (type={}, v={}, by={}.{})",
                 key, type.getSimpleName(), version, group, function);
@@ -126,9 +145,16 @@ public class HeapExchangeImpl implements HeapExchange {
         // HeapGuard: track access for staleness
         guard.recordAccess(key);
 
-        // AuditLog: record access
+        // AuditLog + causal capture
         auditLog.recordAccess(key, type.getSimpleName(), group, function,
                 currentRevision(), true);
+        if (captureEngine != null) {
+            var ctx = com.kubefn.runtime.lifecycle.RevisionContext.current();
+            String reqId = ctx != null ? ctx.requestId() : null;
+            if (reqId != null) {
+                captureEngine.captureHeapGet(reqId, key, type.getSimpleName(), true);
+            }
+        }
 
         // Zero copy: return the SAME object reference
         return Optional.of((T) capsule.value());

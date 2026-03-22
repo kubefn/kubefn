@@ -56,6 +56,9 @@ public class KubeFnMain {
                 new CausalEventRing(100_000));
         ReplayEngine replayEngine = new ReplayEngine(captureEngine, router);
 
+        // Wire capture engine into HeapExchange for full heap operation tracing
+        heapExchange.setCaptureEngine(captureEngine);
+
         FunctionLoader loader = new FunctionLoader(router, heapExchange, drainManager);
 
         // Start HTTP server with ALL v0.3 features wired
