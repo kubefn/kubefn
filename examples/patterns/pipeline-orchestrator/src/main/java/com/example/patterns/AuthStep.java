@@ -67,7 +67,7 @@ public class AuthStep implements KubeFnHandler, FnContextAware {
         // Publish to heap using a DYNAMIC key: "auth:<userId>".
         // Dynamic keys allow multiple AuthContexts to coexist in the heap
         // (one per user), which is needed for multi-tenant pipelines.
-        heap.publish(HeapKeys.auth(userId), auth, AuthContext.class);
+        heap.publish(HeapKeys.auth(userId), auth);
 
         ctx.logger().info("AuthStep: published AuthContext for userId={}, tier={}",
             userId, auth.tier());

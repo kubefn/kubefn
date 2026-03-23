@@ -71,7 +71,7 @@ public class OrderSummaryConsumer implements KubeFnHandler, FnContextAware {
         // Static keys are used for singleton data — there is only one "current pricing".
         // The second argument (PricingResult.class) ensures type safety at compile time.
         // You get back a PricingResult, not an Object — no casting needed.
-        PricingResult pricing = heap.get(HeapKeys.PRICING_CURRENT, PricingResult.class)
+        PricingResult pricing = heap.get(HeapKeys.PRICING_CURRENT)
             .orElseThrow(() -> new IllegalStateException(
                 "PricingResult not found in heap at key '" + HeapKeys.PRICING_CURRENT + "'. "
                 + "Ensure a pricing producer function has run before this consumer."
@@ -83,14 +83,14 @@ public class OrderSummaryConsumer implements KubeFnHandler, FnContextAware {
         String userId = request.queryParam("userId")
             .orElseThrow(() -> new IllegalArgumentException("userId query parameter is required"));
 
-        AuthContext auth = heap.get(HeapKeys.auth(userId), AuthContext.class)
+        AuthContext auth = heap.get(HeapKeys.auth(userId))
             .orElseThrow(() -> new IllegalStateException(
                 "AuthContext not found for userId '" + userId + "'. "
                 + "Ensure the auth function has run for this user."
             ));
 
         // Read TaxCalculation — another required field.
-        TaxCalculation tax = heap.get(HeapKeys.TAX_CALCULATED, TaxCalculation.class)
+        TaxCalculation tax = heap.get(HeapKeys.TAX_CALCULATED)
             .orElseThrow(() -> new IllegalStateException(
                 "TaxCalculation not found in heap. Ensure tax function has run."
             ));
@@ -104,7 +104,7 @@ public class OrderSummaryConsumer implements KubeFnHandler, FnContextAware {
 
         // ShippingEstimate might not be available yet if the user hasn't
         // selected a shipping method. We provide a default estimate.
-        ShippingEstimate shipping = heap.get(HeapKeys.SHIPPING_ESTIMATE, ShippingEstimate.class)
+        ShippingEstimate shipping = heap.get(HeapKeys.SHIPPING_ESTIMATE)
             .orElse(new ShippingEstimate(
                 "standard",     // method: default to standard shipping
                 "unknown",      // fromWarehouse: not yet determined
@@ -115,7 +115,7 @@ public class OrderSummaryConsumer implements KubeFnHandler, FnContextAware {
         // Read inventory using a dynamic key — optional because the SKU
         // might not have inventory data loaded yet.
         String sku = request.queryParam("sku").orElse("DEFAULT-SKU-001");
-        InventoryStatus inventory = heap.get(HeapKeys.inventory(sku), InventoryStatus.class)
+        InventoryStatus inventory = heap.get(HeapKeys.inventory(sku))
             .orElse(new InventoryStatus(sku, 0, 0, "unknown"));
 
         // ---------------------------------------------------------------

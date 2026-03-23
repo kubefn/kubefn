@@ -13,5 +13,5 @@ plugins {
 }
 
 dependencies {
-    // No dependencies — pure data types only
+    api(project(":kubefn-api"))  // HeapKey<T> for typed heap key constants
 }

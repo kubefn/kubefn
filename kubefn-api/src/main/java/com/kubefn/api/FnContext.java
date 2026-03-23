@@ -53,4 +53,30 @@ public interface FnContext {
      * The revision identifier of the current deployment.
      */
     String revisionId();
+
+    /**
+     * The current request ID (for tracing and correlation).
+     */
+    default String requestId() { return "unknown"; }
+
+    /**
+     * Acquire a shared resource (connection pool, HTTP client, etc.)
+     * managed by the organism. Returns the resource or throws if unavailable.
+     *
+     * <p>Usage:
+     * <pre>{@code
+     * DataSource ds = ctx.resource("postgres-main", DataSource.class);
+     * try (Connection conn = ds.getConnection()) {
+     *     // Use the connection — pool is shared across all functions
+     * }
+     * }</pre>
+     *
+     * @param name the resource name registered at organism startup
+     * @param type the expected resource type
+     * @return the shared resource
+     * @throws IllegalStateException if resource not found or unavailable
+     */
+    default <T> T resource(String name, Class<T> type) {
+        throw new UnsupportedOperationException("Shared resources not configured");
+    }
 }

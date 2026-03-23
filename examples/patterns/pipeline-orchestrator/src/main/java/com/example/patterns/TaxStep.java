@@ -55,7 +55,7 @@ public class TaxStep implements KubeFnHandler, FnContextAware {
         // Read PricingResult from heap — this MUST exist because the
         // orchestrator calls PricingStep before TaxStep.
         // Using .orElseThrow() because tax cannot be calculated without a price.
-        PricingResult pricing = heap.get(HeapKeys.PRICING_CURRENT, PricingResult.class)
+        PricingResult pricing = heap.get(HeapKeys.PRICING_CURRENT)
             .orElseThrow(() -> new IllegalStateException(
                 "TaxStep requires PricingResult in heap at key '" + HeapKeys.PRICING_CURRENT + "'. "
                 + "Ensure PricingStep runs before TaxStep in the pipeline."
@@ -77,7 +77,7 @@ public class TaxStep implements KubeFnHandler, FnContextAware {
         );
 
         // Publish tax calculation so the orchestrator and other steps can read it.
-        heap.publish(HeapKeys.TAX_CALCULATED, tax, TaxCalculation.class);
+        heap.publish(HeapKeys.TAX_CALCULATED, tax);
 
         ctx.logger().info("TaxStep: published TaxCalculation, total={} (subtotal={} + tax={})",
             total, subtotal, taxAmount);

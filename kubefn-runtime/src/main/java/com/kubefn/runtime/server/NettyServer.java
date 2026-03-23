@@ -2,6 +2,7 @@ package com.kubefn.runtime.server;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kubefn.runtime.config.RuntimeConfig;
+import com.kubefn.runtime.heap.HeapLifecycle;
 import com.kubefn.runtime.introspection.CausalCaptureEngine;
 import com.kubefn.runtime.lifecycle.DrainManager;
 import com.kubefn.runtime.resilience.FallbackRegistry;
@@ -35,6 +36,7 @@ public class NettyServer {
     private final FallbackRegistry fallbackRegistry;
     private final DrainManager drainManager;
     private final CausalCaptureEngine captureEngine;
+    private final HeapLifecycle heapLifecycle;
 
     private EventLoopGroup bossGroup;
     private EventLoopGroup workerGroup;
@@ -44,13 +46,15 @@ public class NettyServer {
                        FunctionCircuitBreaker circuitBreaker,
                        FallbackRegistry fallbackRegistry,
                        DrainManager drainManager,
-                       CausalCaptureEngine captureEngine) {
+                       CausalCaptureEngine captureEngine,
+                       HeapLifecycle heapLifecycle) {
         this.config = config;
         this.router = router;
         this.circuitBreaker = circuitBreaker;
         this.fallbackRegistry = fallbackRegistry;
         this.drainManager = drainManager;
         this.captureEngine = captureEngine;
+        this.heapLifecycle = heapLifecycle;
         this.objectMapper = new ObjectMapper();
         this.objectMapper.findAndRegisterModules();
         this.functionExecutor = Executors.newVirtualThreadPerTaskExecutor();
@@ -71,7 +75,8 @@ public class NettyServer {
                         pipeline.addLast(new HttpObjectAggregator(config.maxRequestBodyBytes()));
                         pipeline.addLast(new RequestDispatcher(
                                 router, functionExecutor, objectMapper, config,
-                                circuitBreaker, fallbackRegistry, drainManager, captureEngine));
+                                circuitBreaker, fallbackRegistry, drainManager,
+                                captureEngine, heapLifecycle));
                     }
                 })
                 .option(ChannelOption.SO_BACKLOG, 1024)

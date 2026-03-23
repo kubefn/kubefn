@@ -70,4 +70,70 @@ public interface HeapExchange {
      * Check if a key exists.
      */
     boolean contains(String key);
+
+    // ── Typed HeapKey<T> API (compile-time safe) ──────────────────────
+
+    /**
+     * Get a shared object by typed key. Compile-time safe — wrong type won't compile.
+     *
+     * <pre>{@code
+     * Optional<PricingResult> pricing = ctx.heap().get(HeapKeys.PRICING_CURRENT);
+     * }</pre>
+     */
+    default <T> Optional<T> get(HeapKey<T> key) {
+        return get(key.name(), key.type());
+    }
+
+    /**
+     * Get a shared object or throw if missing. Use for required dependencies.
+     *
+     * <pre>{@code
+     * PricingResult pricing = ctx.heap().require(HeapKeys.PRICING_CURRENT);
+     * }</pre>
+     *
+     * @throws IllegalStateException if the key is not present on the heap
+     */
+    default <T> T require(HeapKey<T> key) {
+        return get(key.name(), key.type())
+                .orElseThrow(() -> new IllegalStateException(
+                        "Required heap key not found: " + key.name() +
+                        " (type=" + key.type().getSimpleName() + "). " +
+                        "The producer function may not have run yet."));
+    }
+
+    /**
+     * Get a shared object or return a default value.
+     *
+     * <pre>{@code
+     * PricingResult pricing = ctx.heap().getOrDefault(HeapKeys.PRICING_CURRENT, defaultPricing);
+     * }</pre>
+     */
+    default <T> T getOrDefault(HeapKey<T> key, T defaultValue) {
+        return get(key.name(), key.type()).orElse(defaultValue);
+    }
+
+    /**
+     * Publish a typed object using a HeapKey. Compile-time safe.
+     *
+     * <pre>{@code
+     * ctx.heap().publish(HeapKeys.TAX_CALCULATED, taxResult);
+     * }</pre>
+     */
+    default <T> HeapCapsule<T> publish(HeapKey<T> key, T value) {
+        return publish(key.name(), value, key.type());
+    }
+
+    /**
+     * Check if a typed key exists on the heap.
+     */
+    default boolean contains(HeapKey<?> key) {
+        return contains(key.name());
+    }
+
+    /**
+     * Remove a typed key from the heap.
+     */
+    default boolean remove(HeapKey<?> key) {
+        return remove(key.name());
+    }
 }

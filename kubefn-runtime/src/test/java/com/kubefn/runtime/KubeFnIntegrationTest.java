@@ -32,7 +32,7 @@ class KubeFnIntegrationTest {
         heapExchange = new HeapExchangeImpl();
         router = new FunctionRouter();
         drainManager = new DrainManager();
-        loader = new FunctionLoader(router, heapExchange, drainManager);
+        loader = new FunctionLoader(router, heapExchange, drainManager, new com.kubefn.runtime.resources.SharedResourceManager());
         tempDir = Files.createTempDirectory("kubefn-test");
     }
 

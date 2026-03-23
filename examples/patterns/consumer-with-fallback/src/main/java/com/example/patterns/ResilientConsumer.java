@@ -81,7 +81,7 @@ public class ResilientConsumer implements KubeFnHandler, FnContextAware {
         // WHY: PricingResult might be missing if the pricing service hasn't
         // run yet, or if it failed. We provide a "list price" default so the
         // customer sees something rather than an error page.
-        PricingResult pricing = heap.get(HeapKeys.PRICING_CURRENT, PricingResult.class)
+        PricingResult pricing = heap.get(HeapKeys.PRICING_CURRENT)
             .orElse(new PricingResult(
                 "USD",      // currency: default to USD
                 0.0,        // basePrice: zero signals "price unavailable"
@@ -108,7 +108,7 @@ public class ResilientConsumer implements KubeFnHandler, FnContextAware {
         InventoryStatus inventory;
         if (heap.contains(HeapKeys.inventory(sku))) {
             // Data exists — read it with confidence.
-            inventory = heap.get(HeapKeys.inventory(sku), InventoryStatus.class).get();
+            inventory = heap.get(HeapKeys.inventory(sku)).get();
             hasInventory = true;
             ctx.logger().info("Inventory found for sku={}: available={}", sku, inventory.available());
         } else {
@@ -128,7 +128,7 @@ public class ResilientConsumer implements KubeFnHandler, FnContextAware {
         // WHY: Optional.map() lets you transform the value IF present,
         // and returns Optional.empty() if not. This avoids nested if/else.
         // Here we extract just the cost from ShippingEstimate, or default to 0.
-        Optional<ShippingEstimate> shippingOpt = heap.get(HeapKeys.SHIPPING_ESTIMATE, ShippingEstimate.class);
+        Optional<ShippingEstimate> shippingOpt = heap.get(HeapKeys.SHIPPING_ESTIMATE);
 
         // map() transforms ShippingEstimate -> String without unwrapping manually.
         // If the Optional is empty, map() returns Optional.empty() — no NPE risk.
@@ -159,7 +159,7 @@ public class ResilientConsumer implements KubeFnHandler, FnContextAware {
         // blocking ALL purchases when the fraud service is down is worse
         // than allowing a few potentially fraudulent ones through.
         // This is a BUSINESS DECISION — document it clearly.
-        FraudScore fraud = heap.get(HeapKeys.FRAUD_RESULT, FraudScore.class)
+        FraudScore fraud = heap.get(HeapKeys.FRAUD_RESULT)
             .orElse(new FraudScore(
                 0.0,        // riskScore: 0 = no risk (optimistic default)
                 true,       // approved: allow purchase when fraud service is unavailable

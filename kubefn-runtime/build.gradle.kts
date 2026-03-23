@@ -17,6 +17,8 @@ application {
 
 dependencies {
     implementation(project(":kubefn-api"))
+    implementation(project(":kubefn-contracts"))
+    implementation(project(":kubefn-shared"))
 
     // Runtime internals — NOT exposed to functions
     implementation(libs.netty.all)

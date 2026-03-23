@@ -56,14 +56,14 @@ public class FraudStep implements KubeFnHandler, FnContextAware {
         ctx.logger().info("FraudStep: scoring fraud for userId={}", userId);
 
         // Read AuthContext — needed for user tier and authentication status.
-        AuthContext auth = heap.get(HeapKeys.auth(userId), AuthContext.class)
+        AuthContext auth = heap.get(HeapKeys.auth(userId))
             .orElseThrow(() -> new IllegalStateException(
                 "FraudStep requires AuthContext for userId '" + userId + "'. "
                 + "Ensure AuthStep runs before FraudStep."
             ));
 
         // Read PricingResult — needed for transaction amount.
-        PricingResult pricing = heap.get(HeapKeys.PRICING_CURRENT, PricingResult.class)
+        PricingResult pricing = heap.get(HeapKeys.PRICING_CURRENT)
             .orElseThrow(() -> new IllegalStateException(
                 "FraudStep requires PricingResult in heap. "
                 + "Ensure PricingStep runs before FraudStep."
@@ -105,7 +105,7 @@ public class FraudStep implements KubeFnHandler, FnContextAware {
         );
 
         // Publish fraud score for the orchestrator (and potentially other steps) to read.
-        heap.publish(HeapKeys.FRAUD_RESULT, fraud, FraudScore.class);
+        heap.publish(HeapKeys.FRAUD_RESULT, fraud);
 
         ctx.logger().info("FraudStep: published FraudScore, riskScore={}, approved={}",
             riskScore, approved);

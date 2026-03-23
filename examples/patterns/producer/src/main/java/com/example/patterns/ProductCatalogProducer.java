@@ -82,12 +82,12 @@ public class ProductCatalogProducer implements KubeFnHandler, FnContextAware {
         // and makes it easy to find all producers/consumers of a given key.
         //
         // The third argument is the type — this enables typed retrieval:
-        //   heap.get(HeapKeys.PRICING_CURRENT, PricingResult.class)
+        //   heap.get(HeapKeys.PRICING_CURRENT)
         //
         // IMPORTANT: publish() returns a HeapCapsule, which wraps the object
         // with metadata (timestamp, producer ID, etc.). You rarely need it,
         // but it is available for audit/debugging.
-        heap.publish(HeapKeys.PRICING_CURRENT, pricing, PricingResult.class);
+        heap.publish(HeapKeys.PRICING_CURRENT, pricing);
 
         ctx.logger().info("Published PricingResult: finalPrice={}", pricing.finalPrice());
 
@@ -105,7 +105,7 @@ public class ProductCatalogProducer implements KubeFnHandler, FnContextAware {
         // Dynamic keys are used when you have multiple instances of the same
         // type (e.g., inventory for different SKUs). Static keys like
         // PRICING_CURRENT are used for singleton data.
-        heap.publish(HeapKeys.inventory(sku), inventory, InventoryStatus.class);
+        heap.publish(HeapKeys.inventory(sku), inventory);
 
         ctx.logger().info("Published InventoryStatus: sku={}, available={}", sku, inventory.available());
 

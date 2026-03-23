@@ -39,14 +39,17 @@ public class FunctionLoader {
     private final FunctionRouter router;
     private final HeapExchangeImpl heapExchange;
     private final DrainManager drainManager;
+    private final com.kubefn.runtime.resources.SharedResourceManager resourceManager;
     private final Map<String, FunctionGroupClassLoader> activeClassLoaders = new HashMap<>();
     private final Map<String, FunctionGroupContext> activeContexts = new HashMap<>();
 
     public FunctionLoader(FunctionRouter router, HeapExchangeImpl heapExchange,
-                          DrainManager drainManager) {
+                          DrainManager drainManager,
+                          com.kubefn.runtime.resources.SharedResourceManager resourceManager) {
         this.router = router;
         this.heapExchange = heapExchange;
         this.drainManager = drainManager;
+        this.resourceManager = resourceManager;
     }
 
     /**
@@ -117,7 +120,7 @@ public class FunctionLoader {
 
             // Create group context
             FunctionGroupContext context = new FunctionGroupContext(
-                    groupName, revisionId, heapExchange, Map.of());
+                    groupName, revisionId, heapExchange, Map.of(), resourceManager);
 
             // Scan and load functions
             List<Class<?>> handlerClasses = scanForHandlers(classLoader, urls);
@@ -208,6 +211,12 @@ public class FunctionLoader {
 
             // Register in group context (for pipeline and getFunction)
             context.registerFunction((Class<? extends KubeFnHandler>) handlerClass, handler);
+
+            // Register @Produces/@Consumes for diagnostics
+            var diagnostics = heapExchange.diagnostics();
+            if (diagnostics != null) {
+                diagnostics.registerFunction(groupName, handlerClass.getSimpleName(), handlerClass);
+            }
 
             // Call init lifecycle hook
             if (handler instanceof FnLifecycle lifecycle) {

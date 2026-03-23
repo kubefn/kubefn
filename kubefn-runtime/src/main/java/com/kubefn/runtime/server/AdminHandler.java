@@ -2,10 +2,13 @@ package com.kubefn.runtime.server;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kubefn.runtime.heap.HeapExchangeImpl;
+import com.kubefn.runtime.heap.HeapLifecycle;
 import com.kubefn.runtime.introspection.CausalCaptureEngine;
 import com.kubefn.runtime.introspection.ReplayEngine;
 import com.kubefn.runtime.metrics.KubeFnMetrics;
+import com.kubefn.runtime.metrics.PrometheusExporter;
 import com.kubefn.runtime.resilience.FunctionCircuitBreaker;
+import com.kubefn.runtime.resources.SharedResourceManager;
 import com.kubefn.runtime.routing.FunctionRouter;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFutureListener;
@@ -30,18 +33,26 @@ public class AdminHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
     private final FunctionCircuitBreaker circuitBreaker;
     private final CausalCaptureEngine captureEngine;
     private final ReplayEngine replayEngine;
+    private final PrometheusExporter prometheusExporter;
+    private final HeapLifecycle heapLifecycle;
+    private final SharedResourceManager resourceManager;
     private final AdminAuth auth;
     private byte[] traceUiHtml;
 
     public AdminHandler(FunctionRouter router, ObjectMapper objectMapper,
                         HeapExchangeImpl heapExchange, FunctionCircuitBreaker circuitBreaker,
-                        CausalCaptureEngine captureEngine, ReplayEngine replayEngine) {
+                        CausalCaptureEngine captureEngine, ReplayEngine replayEngine,
+                        PrometheusExporter prometheusExporter, HeapLifecycle heapLifecycle,
+                        SharedResourceManager resourceManager) {
         this.router = router;
         this.objectMapper = objectMapper;
         this.heapExchange = heapExchange;
         this.circuitBreaker = circuitBreaker;
         this.captureEngine = captureEngine;
         this.replayEngine = replayEngine;
+        this.prometheusExporter = prometheusExporter;
+        this.heapLifecycle = heapLifecycle;
+        this.resourceManager = resourceManager;
         this.auth = new AdminAuth();
         loadTraceUi();
     }
@@ -140,6 +151,29 @@ public class AdminHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
 
             case "/admin/breakers" -> responseBody = circuitBreaker.allStatus();
             case "/admin/metrics" -> responseBody = KubeFnMetrics.instance().snapshot();
+
+            case "/admin/lifecycle" -> responseBody = heapLifecycle.metrics();
+
+            case "/admin/resources" -> responseBody = resourceManager.listResources();
+
+            case "/admin/graph" -> {
+                var diagnostics = heapExchange.diagnostics();
+                responseBody = diagnostics != null ? diagnostics.dependencyGraph()
+                        : Map.of("error", "Diagnostics not initialized");
+            }
+
+            case "/admin/prometheus" -> {
+                // Prometheus text format — different content type
+                byte[] promBody = prometheusExporter.export().getBytes();
+                FullHttpResponse promResponse = new DefaultFullHttpResponse(
+                        HttpVersion.HTTP_1_1, HttpResponseStatus.OK,
+                        Unpooled.wrappedBuffer(promBody));
+                promResponse.headers().set(HttpHeaderNames.CONTENT_TYPE,
+                        "text/plain; version=0.0.4; charset=utf-8");
+                promResponse.headers().set(HttpHeaderNames.CONTENT_LENGTH, promBody.length);
+                ctx.writeAndFlush(promResponse).addListener(ChannelFutureListener.CLOSE);
+                return;
+            }
 
             // Causal Introspection
             case "/admin/traces/recent" -> {

@@ -62,7 +62,7 @@ public class PricingStep implements KubeFnHandler, FnContextAware {
 
         // Publish using the static key PRICING_CURRENT.
         // Other steps (TaxStep, FraudStep) and the orchestrator will read this.
-        heap.publish(HeapKeys.PRICING_CURRENT, pricing, PricingResult.class);
+        heap.publish(HeapKeys.PRICING_CURRENT, pricing);
 
         ctx.logger().info("PricingStep: published PricingResult, finalPrice={}", finalPrice);
 

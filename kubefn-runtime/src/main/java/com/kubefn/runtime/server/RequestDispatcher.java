@@ -5,6 +5,7 @@ import com.kubefn.api.KubeFnRequest;
 import com.kubefn.api.KubeFnResponse;
 import com.kubefn.runtime.config.RuntimeConfig;
 import com.kubefn.runtime.heap.HeapExchangeImpl;
+import com.kubefn.runtime.heap.HeapLifecycle;
 import com.kubefn.runtime.introspection.CausalCaptureEngine;
 import com.kubefn.runtime.lifecycle.DrainManager;
 import com.kubefn.runtime.lifecycle.RevisionContext;
@@ -53,6 +54,7 @@ public class RequestDispatcher extends SimpleChannelInboundHandler<FullHttpReque
     private final FallbackRegistry fallbackRegistry;
     private final DrainManager drainManager;
     private final CausalCaptureEngine captureEngine;
+    private final HeapLifecycle heapLifecycle;
     private final Map<String, Semaphore> groupSemaphores;
 
     public RequestDispatcher(FunctionRouter router, ExecutorService executor,
@@ -60,7 +62,8 @@ public class RequestDispatcher extends SimpleChannelInboundHandler<FullHttpReque
                              FunctionCircuitBreaker circuitBreaker,
                              FallbackRegistry fallbackRegistry,
                              DrainManager drainManager,
-                             CausalCaptureEngine captureEngine) {
+                             CausalCaptureEngine captureEngine,
+                             HeapLifecycle heapLifecycle) {
         this.router = router;
         this.executor = executor;
         this.objectMapper = objectMapper;
@@ -69,6 +72,7 @@ public class RequestDispatcher extends SimpleChannelInboundHandler<FullHttpReque
         this.fallbackRegistry = fallbackRegistry;
         this.drainManager = drainManager;
         this.captureEngine = captureEngine;
+        this.heapLifecycle = heapLifecycle;
         this.groupSemaphores = new HashMap<>();
     }
 
@@ -107,6 +111,10 @@ public class RequestDispatcher extends SimpleChannelInboundHandler<FullHttpReque
                 log.error("Unhandled dispatch error: {} {}", method, path, e);
                 sendError(ctx, 500, "Internal server error", requestId);
             } finally {
+                // Clean up request-scoped heap objects
+                if (heapLifecycle != null) {
+                    heapLifecycle.onRequestComplete(requestId);
+                }
                 MDC.clear();
                 RevisionContext.clear();
                 HeapExchangeImpl.clearCurrentContext();

@@ -35,6 +35,9 @@ public class HeapExchangeImpl implements HeapExchange {
     // Causal introspection — set after construction to avoid circular dependency
     private volatile CausalCaptureEngine captureEngine;
 
+    // Smart error diagnostics — provides actionable messages on heap misses
+    private volatile HeapDiagnostics diagnostics;
+
     // Counters
     private final AtomicLong publishCount = new AtomicLong(0);
     private final AtomicLong getCount = new AtomicLong(0);
@@ -61,6 +64,12 @@ public class HeapExchangeImpl implements HeapExchange {
     public void setCaptureEngine(CausalCaptureEngine engine) {
         this.captureEngine = engine;
     }
+
+    public void setDiagnostics(HeapDiagnostics diagnostics) {
+        this.diagnostics = diagnostics;
+    }
+
+    public HeapDiagnostics diagnostics() { return diagnostics; }
 
     public static void setCurrentContext(String group, String function) {
         currentGroup.set(group);
@@ -132,6 +141,13 @@ public class HeapExchangeImpl implements HeapExchange {
                 var ctx = com.kubefn.runtime.lifecycle.RevisionContext.current();
                 if (ctx != null) {
                     captureEngine.captureHeapGet(ctx.requestId(), key, type.getSimpleName(), false);
+                }
+            }
+            // Smart diagnostics: log actionable message for developers
+            if (diagnostics != null) {
+                String diagnosis = diagnostics.diagnoseMiss(key, type.getSimpleName(), group, function);
+                if (diagnosis != null) {
+                    log.info(diagnosis);
                 }
             }
             return Optional.empty();

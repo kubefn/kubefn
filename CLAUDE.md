@@ -96,10 +96,29 @@ ctx.getFunction(TaxFunction.class).handle(request);
 // Results are on the heap — read them zero-copy
 ```
 
-## Dependencies
+## Dependencies (layered classpath — compile against, runtime provides)
 ```gradle
-compileOnly("com.kubefn:kubefn-api:0.3.1")
-compileOnly("com.kubefn:kubefn-contracts:0.3.1")
+compileOnly("com.kubefn:kubefn-api:0.4.0")        // Layer 1: interfaces
+compileOnly("com.kubefn:kubefn-contracts:0.4.0")   // Layer 2: shared types
+compileOnly("com.kubefn:kubefn-shared:0.4.0")      // Layer 3: utilities
+// Layer 4: YOUR code only (thin JAR)
+```
+
+## Shared Utilities (kubefn-shared)
+```java
+// Easy heap reads
+PricingResult pricing = HeapReader.require(ctx, HeapKeys.PRICING_CURRENT, PricingResult.class);
+PricingResult pricing = HeapReader.getOrDefault(ctx, key, PricingResult.class, () -> defaultPricing);
+
+// Easy heap writes
+HeapPublisher.publish(ctx, HeapKeys.TAX_CALCULATED, taxResult);
+
+// Easy pipeline orchestration
+var result = PipelineBuilder.create(ctx, request)
+    .step("auth", AuthFunction.class)
+    .step("pricing", PricingFunction.class)
+    .step("tax", TaxFunction.class)
+    .execute();
 ```
 
 ## Reference Examples (study these)

@@ -143,16 +143,16 @@ public class CheckoutOrchestrator implements KubeFnHandler, FnContextAware {
         // ZERO COPY: Each .get() returns the same Java object reference that
         // the step published. No serialization, no copying, no parsing.
 
-        AuthContext auth = heap.get(HeapKeys.auth(userId), AuthContext.class)
+        AuthContext auth = heap.get(HeapKeys.auth(userId))
             .orElseThrow(() -> new IllegalStateException("AuthContext missing after pipeline execution"));
 
-        PricingResult pricing = heap.get(HeapKeys.PRICING_CURRENT, PricingResult.class)
+        PricingResult pricing = heap.get(HeapKeys.PRICING_CURRENT)
             .orElseThrow(() -> new IllegalStateException("PricingResult missing after pipeline execution"));
 
-        TaxCalculation tax = heap.get(HeapKeys.TAX_CALCULATED, TaxCalculation.class)
+        TaxCalculation tax = heap.get(HeapKeys.TAX_CALCULATED)
             .orElseThrow(() -> new IllegalStateException("TaxCalculation missing after pipeline execution"));
 
-        FraudScore fraud = heap.get(HeapKeys.FRAUD_RESULT, FraudScore.class)
+        FraudScore fraud = heap.get(HeapKeys.FRAUD_RESULT)
             .orElseThrow(() -> new IllegalStateException("FraudScore missing after pipeline execution"));
 
         // ---------------------------------------------------------------
