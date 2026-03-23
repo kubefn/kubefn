@@ -751,13 +751,145 @@
                 </div>
                 <div class="pillar" style="padding:18px;text-align:center;border-color:var(--green);">
                     <div style="font-size:1.5rem;margin-bottom:6px;font-weight:700;color:#3776AB">Python</div>
-                    <div style="font-size:12px;color:var(--text-dim)">ML pipelines &middot; 535x faster</div>
+                    <div style="font-size:12px;color:var(--text-dim)">ML pipelines &middot; 6-30x faster</div>
                 </div>
                 <div class="pillar" style="padding:18px;text-align:center;border-color:var(--green);">
                     <div style="font-size:1.5rem;margin-bottom:6px;font-weight:700;color:#F1E05A">Node.js</div>
-                    <div style="font-size:12px;color:var(--text-dim)">API gateways &middot; 3,704x faster</div>
+                    <div style="font-size:12px;color:var(--text-dim)">API gateways &middot; 20-100x faster</div>
                 </div>
             </div>
+        </div>
+    </section>
+
+    <!-- Use Cases -->
+    <section class="pillars" id="usecases">
+        <div class="container">
+            <h2>Every container you don't need</h2>
+            <p style="text-align:center;color:var(--text-dim);margin-bottom:12px;max-width:700px;margin-left:auto;margin-right:auto">
+                Every sidecar, init container, cron job, and queue worker in Kubernetes
+                is a container that doesn't need to exist. KubeFn runs them all as functions
+                in a single warm JVM — zero cold starts, zero container builds.
+            </p>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-top:28px">
+                <!-- Schedulers -->
+                <div class="pillar" style="padding:20px">
+                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                        <span style="font-size:1.4rem">&#128344;</span>
+                        <span style="font-size:1.1rem;font-weight:700;color:var(--accent)">Cron Jobs &amp; Schedulers</span>
+                    </div>
+                    <div style="font-size:13px;color:var(--text-dim);margin-bottom:12px">
+                        <b style="color:var(--red)">Today:</b> Full container build for a 200ms task. 30s JVM cold start. Idle pods.<br>
+                        <b style="color:var(--green)">KubeFn:</b> <code>@FnSchedule(cron = "0 0/15 * * *")</code> — runs in the warm JVM.
+                    </div>
+<pre style="font-size:11px;padding:10px;margin:0;background:#0d1117;border-radius:6px"><span class="kw">@FnSchedule</span>(cron = <span class="str">"0 0/15 * * *"</span>)
+<span class="kw">@FnRoute</span>(path = <span class="str">"/cleanup"</span>)
+<span class="kw">public class</span> <span class="type">SessionCleanup</span> <span class="kw">implements</span> <span class="type">KubeFnHandler</span> {
+    <span class="cm">// Runs on schedule AND via HTTP. Shared heap access.</span>
+}</pre>
+                </div>
+
+                <!-- Queue Workers -->
+                <div class="pillar" style="padding:20px">
+                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                        <span style="font-size:1.4rem">&#128229;</span>
+                        <span style="font-size:1.1rem;font-weight:700;color:var(--accent)">Queue Workers</span>
+                    </div>
+                    <div style="font-size:13px;color:var(--text-dim);margin-bottom:12px">
+                        <b style="color:var(--red)">Today:</b> Separate deployment per queue. Each deserializes messages independently.<br>
+                        <b style="color:var(--green)">KubeFn:</b> <code>@FnQueue(topic = "orders")</code> — consumes in-process, zero-copy.
+                    </div>
+<pre style="font-size:11px;padding:10px;margin:0;background:#0d1117;border-radius:6px"><span class="kw">@FnQueue</span>(topic = <span class="str">"orders"</span>, concurrency = <span class="num">4</span>)
+<span class="kw">public class</span> <span class="type">OrderProcessor</span> <span class="kw">implements</span> <span class="type">KubeFnHandler</span> {
+    <span class="cm">// Consumes from queue. DLQ on failure. Shared heap.</span>
+}</pre>
+                </div>
+
+                <!-- Sidecar Replacement -->
+                <div class="pillar" style="padding:20px">
+                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                        <span style="font-size:1.4rem">&#128737;</span>
+                        <span style="font-size:1.1rem;font-weight:700;color:var(--accent)">Sidecar Killer</span>
+                    </div>
+                    <div style="font-size:13px;color:var(--text-dim);margin-bottom:12px">
+                        <b style="color:var(--red)">Today:</b> Auth proxy + metrics shipper + config agent = 3x pod resources.<br>
+                        <b style="color:var(--green)">KubeFn:</b> Auth, metrics, config as in-process functions. One pod.
+                    </div>
+                    <div style="font-size:12px;color:var(--text-dim);padding:10px;background:#0d1117;border-radius:6px;font-family:monospace">
+                        <span style="color:var(--red)">Before:</span> 3 sidecars &times; 500 pods = 1,500 extra containers<br>
+                        <span style="color:var(--green)">After:</span>&nbsp; 3 functions in shared JVM = 0 extra containers
+                    </div>
+                </div>
+
+                <!-- Webhooks -->
+                <div class="pillar" style="padding:20px">
+                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                        <span style="font-size:1.4rem">&#128268;</span>
+                        <span style="font-size:1.1rem;font-weight:700;color:var(--accent)">Webhooks &amp; Adapters</span>
+                    </div>
+                    <div style="font-size:13px;color:var(--text-dim);margin-bottom:12px">
+                        <b style="color:var(--red)">Today:</b> One service per webhook source. Idle pods for sporadic events.<br>
+                        <b style="color:var(--green)">KubeFn:</b> Webhook = function. Shares heap with downstream. No idle infra.
+                    </div>
+                    <div style="font-size:12px;color:var(--text-dim);padding:10px;background:#0d1117;border-radius:6px;font-family:monospace">
+                        Stripe + GitHub + Slack + Salesforce webhooks<br>
+                        = 4 functions, 1 JVM, 0 idle pods
+                    </div>
+                </div>
+
+                <!-- Init Containers -->
+                <div class="pillar" style="padding:20px">
+                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                        <span style="font-size:1.4rem">&#9889;</span>
+                        <span style="font-size:1.1rem;font-weight:700;color:var(--accent)">Init Container Replacement</span>
+                    </div>
+                    <div style="font-size:13px;color:var(--text-dim);margin-bottom:12px">
+                        <b style="color:var(--red)">Today:</b> Migrations, config gen, dependency checks = startup delays.<br>
+                        <b style="color:var(--green)">KubeFn:</b> <code>@FnLifecyclePhase(phase = INIT)</code> — runs in the warm organism.
+                    </div>
+                    <div style="font-size:12px;color:var(--text-dim);padding:10px;background:#0d1117;border-radius:6px;font-family:monospace">
+                        Preload reference data, verify deps, warm caches<br>
+                        All before traffic starts. Zero extra containers.
+                    </div>
+                </div>
+
+                <!-- Cache Warmers -->
+                <div class="pillar" style="padding:20px">
+                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                        <span style="font-size:1.4rem">&#128293;</span>
+                        <span style="font-size:1.1rem;font-weight:700;color:var(--accent)">Cache Warmers</span>
+                    </div>
+                    <div style="font-size:13px;color:var(--text-dim);margin-bottom:12px">
+                        <b style="color:var(--red)">Today:</b> Cron job loads data into Redis. Every service queries Redis.<br>
+                        <b style="color:var(--green)">KubeFn:</b> Function loads into HeapExchange. All functions read zero-copy.
+                    </div>
+                    <div style="font-size:12px;color:var(--text-dim);padding:10px;background:#0d1117;border-radius:6px;font-family:monospace">
+                        Product catalog, price tables, feature flags<br>
+                        One load, all functions read. No Redis needed.
+                    </div>
+                </div>
+            </div>
+            <p style="text-align:center;color:var(--text-dim);margin-top:24px;font-size:13px">
+                Also: API aggregation, rate limiters, feature flags, audit trails, ETL stages, stream processors,
+                saga coordinators, notification dispatchers, data validators, health monitors, retry handlers,
+                protocol translators, rules engines, logging pipelines, metric aggregators...
+            </p>
+        </div>
+    </section>
+
+    <!-- Code Example with HeapKey<T> -->
+    <section class="code-section" id="quickstart">
+        <div class="container">
+            <h2>Type-safe heap access with HeapKey&lt;T&gt;</h2>
+            <p class="subtitle">Compile-time safe. IDE autocomplete. No string typos. No type mismatches.</p>
+<pre><span class="cm">// Define typed keys in your contracts module</span>
+<span class="kw">public final class</span> <span class="type">HeapKeys</span> {
+    <span class="kw">public static final</span> <span class="type">HeapKey</span>&lt;<span class="type">PricingResult</span>&gt; <span class="fn">PRICING</span> =
+        <span class="type">HeapKey</span>.<span class="fn">of</span>(<span class="str">"pricing:current"</span>, <span class="type">PricingResult</span>.<span class="kw">class</span>);
+}
+
+<span class="cm">// Use in functions — wrong type won't compile</span>
+<span class="type">PricingResult</span> pricing = ctx.<span class="fn">heap</span>().<span class="fn">require</span>(<span class="type">HeapKeys</span>.<span class="fn">PRICING</span>);
+ctx.<span class="fn">heap</span>().<span class="fn">publish</span>(<span class="type">HeapKeys</span>.<span class="fn">TAX</span>, taxResult);</pre>
         </div>
     </section>
 
