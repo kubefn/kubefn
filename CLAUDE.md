@@ -102,6 +102,15 @@ compileOnly("com.kubefn:kubefn-api:0.3.1")
 compileOnly("com.kubefn:kubefn-contracts:0.3.1")
 ```
 
+## Reference Examples (study these)
+| Pattern | File | What it teaches |
+|---|---|---|
+| Producer | `examples/patterns/producer/ProductCatalogProducer.java` | Publishing typed objects to HeapExchange |
+| Consumer | `examples/patterns/consumer/OrderSummaryConsumer.java` | Reading multiple typed objects, zero-copy |
+| Fallback | `examples/patterns/consumer-with-fallback/ResilientConsumer.java` | Graceful degradation when data missing |
+| Pipeline | `examples/patterns/pipeline-orchestrator/CheckoutOrchestrator.java` | Calling siblings + assembling from heap |
+| Contract-First | `examples/patterns/contract-first-stub/` | Developer A+B parallel development |
+
 ## Commands
 ```bash
 kubefn init my-function my-group    # Scaffold new function
