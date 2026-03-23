@@ -4,11 +4,11 @@
 
 KubeFn is a Kubernetes-native runtime where independently deployable Java functions share a living memory space. Functions exchange objects at heap speed — **zero serialization, zero network hops, same memory address**.
 
-**131x faster** than equivalent microservices for a 7-function checkout pipeline.
+**4-18x faster** than equivalent microservices for a 7-function checkout pipeline (full HTTP cycle, measured with [hey](https://github.com/rakyll/hey)).
 
 ```
-Microservices:  ~60ms  (7 HTTP calls + JSON serialization)
-KubeFn:         0.458ms (7 in-memory compositions, zero-copy)
+JVM (7-step checkout):  3.8ms avg  (vs 14-70ms microservices)  →  4-18x faster
+Python (3-step ML):     1.7ms avg  (verified on K8s cluster)    →  6-30x faster
 ```
 
 ## What is Memory-Continuous Architecture?
@@ -250,8 +250,8 @@ Full HTTP request-response cycle, measured with `hey` (1000 requests, 10 concurr
 | Runtime | Pipeline | Avg Latency | p50 | p95 | Throughput | vs Microservices |
 |---|---|---|---|---|---|---|
 | **JVM** | 7-step checkout | 3.8ms | 2.5ms | 4.4ms | 2,550 rps | **4-18x faster** |
-| **Python** | 3-step ML inference | 1.0ms | 0.6ms | 0.9ms | 7,455 rps | **6-30x faster** |
-| **Node.js** | 3-step API gateway | 0.3ms | 0.2ms | 0.5ms | 33,085 rps | **20-100x faster** |
+| **Python** | 3-step ML inference | 1.7ms | — | — | — | **6-30x faster** (verified on K8s) |
+| **Node.js** | 3-step API gateway | — | — | — | — | *In progress — runtime built, loader needs work* |
 
 The speedup comes from eliminating N-1 HTTP round trips and N JSON serialization cycles between functions. In KubeFn, functions compose in-memory via HeapExchange — 1 HTTP call handles the full pipeline.
 
@@ -260,7 +260,7 @@ The speedup comes from eliminating N-1 HTTP round trips and N JSON serialization
 - **Not multi-tenant FaaS** — functions must be from the same trust boundary (same team/app)
 - **Not a service mesh** — there's no network between functions, they share memory
 - **Not an app server** — functions deploy independently with their own revisions
-- **Not polyglot (yet)** — Java/Kotlin first, designed for JVM
+- **JVM-first** — Java/Kotlin/Scala/Groovy production-ready (95 functions on cluster). Python runtime verified on K8s. Node.js runtime in progress.
 
 ## What KubeFn is BEST for
 

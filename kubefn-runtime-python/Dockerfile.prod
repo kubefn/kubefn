@@ -1,0 +1,19 @@
+FROM python:3.12-slim
+
+WORKDIR /opt/kubefn
+
+COPY kubefn/ kubefn/
+COPY examples/ examples/
+COPY pyproject.toml .
+
+RUN pip install --no-cache-dir -e . 2>/dev/null || true
+
+ENV KUBEFN_PORT=8080
+ENV KUBEFN_FUNCTIONS_DIR=/opt/kubefn/examples
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=10s --timeout=3s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/admin/health')" || exit 1
+
+ENTRYPOINT ["python", "-m", "kubefn", "--port", "8080"]
