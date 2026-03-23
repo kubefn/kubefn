@@ -27,5 +27,10 @@ include(
     "examples:kotlin-functions",
     "examples:scala-functions",
     "examples:groovy-functions",
-    "examples:polyglot-demo"
+    "examples:polyglot-demo",
+    "examples:patterns:producer",
+    "examples:patterns:consumer",
+    "examples:patterns:consumer-with-fallback",
+    "examples:patterns:pipeline-orchestrator",
+    "examples:patterns:contract-first-stub"
 )
