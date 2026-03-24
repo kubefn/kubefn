@@ -1,11 +1,10 @@
-// Pattern 2: Consumer — reads typed objects from HeapExchange
-// Reference implementation for any function that READS data published by siblings
-
+plugins { java }
 dependencies {
     compileOnly(project(":kubefn-api"))
     compileOnly(project(":kubefn-contracts"))
+    testImplementation(project(":kubefn-api"))
+    testImplementation(project(":kubefn-contracts"))
+    testImplementation(project(":kubefn-testing"))
+    testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
 }
-
-tasks.jar {
-    archiveBaseName.set("pattern-consumer")
-}
+tasks.test { useJUnitPlatform() }
