@@ -1,0 +1,49 @@
+site_name: KubeFn
+site_url: https://docs.kubefn.com
+site_description: Live Application Fabric for Memory-Continuous Architecture
+repo_url: https://github.com/kubefn/kubefn
+theme:
+  name: material
+  palette:
+    scheme: slate
+    primary: cyan
+    accent: cyan
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - search.highlight
+    - content.code.copy
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Quickstart (5 min): getting-started/quickstart.md
+    - Kubernetes Deploy: getting-started/kubernetes.md
+    - Your First Function: getting-started/first-function.md
+  - Core Concepts:
+    - Architecture: concepts/architecture.md
+    - HeapExchange: concepts/heap-exchange.md
+    - Function Model: concepts/function-model.md
+    - Typed HeapKeys: concepts/heap-keys.md
+    - Scheduling & Queues: concepts/scheduling.md
+    - Lifecycle Hooks: concepts/lifecycle.md
+  - Production Guide:
+    - Deployment: production/deployment.md
+    - Observability: production/observability.md
+    - Security: production/security.md
+    - Scaling: production/scaling.md
+    - Benchmarks: production/benchmarks.md
+  - Examples:
+    - Checkout Pipeline: examples/checkout.md
+    - Fraud Detection: examples/fraud.md
+    - Webhook Handler: examples/webhooks.md
+    - Cron Replacement: examples/schedulers.md
+  - Migration:
+    - From Spring Boot: migration/spring-boot.md
+    - Should I Use KubeFn?: migration/should-i-use.md
+  - Reference:
+    - Annotations: reference/annotations.md
+    - HeapExchange API: reference/heap-api.md
+    - Admin Endpoints: reference/admin-api.md
+    - CLI Commands: reference/cli.md
+    - Helm Values: reference/helm.md
+    - Prometheus Metrics: reference/metrics.md

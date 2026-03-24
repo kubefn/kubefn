@@ -30,6 +30,8 @@ include(
     "examples:scala-functions",
     "examples:groovy-functions",
     "examples:polyglot-demo",
+    "examples:multi-group-demo:group-a",
+    "examples:multi-group-demo:group-b",
     "examples:usecases:schedulers",
     "examples:usecases:queue-workers",
     "examples:usecases:webhooks",
