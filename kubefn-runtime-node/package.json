@@ -1,5 +1,5 @@
 {
-  "name": "kubefn-runtime-node",
+  "name": "@kubefn/runtime",
   "version": "0.4.0",
   "description": "KubeFn Node.js Runtime — Memory-Continuous Architecture for JavaScript/TypeScript",
   "type": "module",

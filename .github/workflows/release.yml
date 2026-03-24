@@ -138,4 +138,4 @@ jobs:
         working-directory: kubefn-runtime-node
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --provenance --access public || echo "npm publish failed (may need NPM_TOKEN secret)"
+        run: npm publish --provenance --access public
