@@ -78,6 +78,7 @@ jobs:
   # ── Python: PyPI via Trusted Publisher ───────────────────────
   python-release:
     runs-on: ubuntu-latest
+    environment: pypi
     permissions:
       id-token: write  # Required for trusted publishing
 
