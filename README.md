@@ -4,7 +4,15 @@
 
 KubeFn is a Kubernetes-native runtime where independently deployable Java functions share a living memory space. Functions exchange objects at heap speed — **zero serialization, zero network hops, same memory address**.
 
-**2.5-12x faster** than equivalent microservices (full HTTP cycle, measured in-cluster on k3s).
+## Multi-Runtime Support
+
+| Runtime | Languages | Status | Install |
+|---|---|---|---|
+| **JVM** | Java, Kotlin, Scala, Groovy | **Production** | `com.kubefn:kubefn-api:0.5.2` (Maven Central) |
+| **Python** | Python 3.10+ | **Beta** | `pip install kubefn` (PyPI) |
+| **Node.js** | JavaScript, TypeScript | **Beta** | `npm install @kubefn/runtime` (npm) |
+
+All runtimes implement the same architecture: shared heap, hot-swap, circuit breakers, drain manager, Prometheus metrics, causal introspection, and scheduler engine.
 
 ```
 In-cluster benchmarks (service-to-service, 10-request average):
@@ -252,7 +260,7 @@ Full HTTP request-response cycle, measured with `hey` (1000 requests, 10 concurr
 
 | Runtime | Pipeline | Avg Latency | p50 | p95 | Throughput | vs Microservices |
 |---|---|---|---|---|---|---|
-| **JVM** | 7-step checkout | 3.8ms | 2.5ms | 4.4ms | 2,550 rps | **4-18x faster** |
+| **JVM** | 7-step checkout | 5.7ms | — | — | — | **2.5-12x faster** |
 | **Python** | 3-step ML inference | 5.4ms | — | — | — | **1.1-5.5x faster** (verified in-cluster) |
 | **Node.js** | 3-step API gateway | 3.0ms | — | — | — | **2-10x faster** (verified in-cluster) |
 
