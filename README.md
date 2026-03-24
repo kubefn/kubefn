@@ -4,11 +4,14 @@
 
 KubeFn is a Kubernetes-native runtime where independently deployable Java functions share a living memory space. Functions exchange objects at heap speed — **zero serialization, zero network hops, same memory address**.
 
-**4-18x faster** than equivalent microservices for a 7-function checkout pipeline (full HTTP cycle, measured with [hey](https://github.com/rakyll/hey)).
+**2.5-12x faster** than equivalent microservices (full HTTP cycle, measured in-cluster on k3s).
 
 ```
-JVM (7-step checkout):  3.8ms avg  (vs 14-70ms microservices)  →  4-18x faster
-Python (3-step ML):     1.7ms avg  (verified on K8s cluster)    →  6-30x faster
+In-cluster benchmarks (service-to-service, 10-request average):
+
+JVM (4-step checkout):     5.7ms  (vs 14-70ms microservices)  →  2.5-12x faster
+Python (3-step ML):        5.4ms  (vs 6-30ms microservices)   →  1.1-5.5x faster
+Node.js (3-step gateway):  3.0ms  (vs 6-30ms microservices)   →  2-10x faster
 ```
 
 ## What is Memory-Continuous Architecture?
@@ -250,8 +253,8 @@ Full HTTP request-response cycle, measured with `hey` (1000 requests, 10 concurr
 | Runtime | Pipeline | Avg Latency | p50 | p95 | Throughput | vs Microservices |
 |---|---|---|---|---|---|---|
 | **JVM** | 7-step checkout | 3.8ms | 2.5ms | 4.4ms | 2,550 rps | **4-18x faster** |
-| **Python** | 3-step ML inference | 1.7ms | — | — | — | **6-30x faster** (verified on K8s) |
-| **Node.js** | 3-step API gateway | — | — | — | — | *In progress — runtime built, loader needs work* |
+| **Python** | 3-step ML inference | 5.4ms | — | — | — | **1.1-5.5x faster** (verified in-cluster) |
+| **Node.js** | 3-step API gateway | 3.0ms | — | — | — | **2-10x faster** (verified in-cluster) |
 
 The speedup comes from eliminating N-1 HTTP round trips and N JSON serialization cycles between functions. In KubeFn, functions compose in-memory via HeapExchange — 1 HTTP call handles the full pipeline.
 
@@ -260,7 +263,7 @@ The speedup comes from eliminating N-1 HTTP round trips and N JSON serialization
 - **Not multi-tenant FaaS** — functions must be from the same trust boundary (same team/app)
 - **Not a service mesh** — there's no network between functions, they share memory
 - **Not an app server** — functions deploy independently with their own revisions
-- **JVM-first** — Java/Kotlin/Scala/Groovy production-ready (95 functions on cluster). Python runtime verified on K8s. Node.js runtime in progress.
+- **Multi-runtime** — JVM (95 functions), Python (5 functions), Node.js (6 functions) — all verified on K8s cluster with honest in-cluster benchmarks
 
 ## What KubeFn is BEST for
 
