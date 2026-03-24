@@ -29,5 +29,13 @@
   "keywords": ["kubefn", "faas", "functions", "shared-memory", "zero-copy", "heap-exchange"],
   "author": "Pranab Sarkar <developer@pranab.co.in>",
   "license": "MIT",
-  "homepage": "https://kubefn.com"
+  "homepage": "https://kubefn.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kubefn/kubefn",
+    "directory": "kubefn-runtime-node"
+  },
+  "bugs": {
+    "url": "https://github.com/kubefn/kubefn/issues"
+  }
 }
