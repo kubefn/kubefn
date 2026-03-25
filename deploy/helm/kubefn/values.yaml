@@ -4,6 +4,11 @@
 # -- Namespace to deploy into
 namespace: kubefn
 
+# -- RBAC configuration
+rbac:
+  # Create ServiceAccount, Role, and RoleBinding for least-privilege access
+  create: true
+
 # -----------------------------------------------------------------------------
 # Runtime configuration
 # -----------------------------------------------------------------------------

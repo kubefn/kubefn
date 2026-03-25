@@ -110,7 +110,7 @@ export class FunctionLoader {
             name,
             path: meta.path,
             methods: meta.methods || ['GET', 'POST'],
-            group: groupName,
+            group: meta.group || groupName,
             handler,
             file: jsFile,
             loadedAt: Date.now(),

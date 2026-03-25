@@ -52,7 +52,7 @@ public final class FakeHeapExchange implements HeapExchange {
     }
 
     /**
-     * Fluent builder: seed the heap with a typed value.
+     * Fluent builder: seed the heap with a typed value using a HeapKey.
      *
      * <pre>{@code
      * var heap = FakeHeapExchange.create()
@@ -63,12 +63,22 @@ public final class FakeHeapExchange implements HeapExchange {
     public <T> FakeHeapExchange with(HeapKey<T> key, T value) {
         publish(key, value);
         // Reset counters since this is setup, not test execution
-        publishLog.clear();
-        getLog.clear();
-        publishCount = 0;
-        getCount = 0;
-        hitCount = 0;
-        missCount = 0;
+        resetCounters();
+        return this;
+    }
+
+    /**
+     * Fluent builder: seed the heap with a string-keyed typed value.
+     *
+     * <pre>{@code
+     * var heap = FakeHeapExchange.create()
+     *     .with("pricing:current", pricingResult, PricingResult.class);
+     * }</pre>
+     */
+    public <T> FakeHeapExchange with(String key, T value, Class<T> type) {
+        publish(key, value, type);
+        // Reset counters since this is setup, not test execution
+        resetCounters();
         return this;
     }
 

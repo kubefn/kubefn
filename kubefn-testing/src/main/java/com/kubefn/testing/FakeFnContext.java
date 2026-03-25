@@ -93,6 +93,19 @@ public final class FakeFnContext implements FnContext {
             return this;
         }
 
+        /**
+         * Register a function under a specific class key.
+         * Useful when the handler is a mock/stub that doesn't extend the real class.
+         *
+         * <pre>{@code
+         * builder.registerFunction(PricingFunction.class, mockPricing)
+         * }</pre>
+         */
+        public <T extends KubeFnHandler> Builder registerFunction(Class<T> type, T function) {
+            this.functions.put(type, function);
+            return this;
+        }
+
         public FakeFnContext build() {
             return new FakeFnContext(this);
         }

@@ -1,0 +1,55 @@
+{{- if .Values.rbac.create }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "kubefn.fullname" . }}-runtime
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kubefn.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "kubefn.fullname" . }}-runtime
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kubefn.labels" . | nindent 4 }}
+rules:
+  # Runtime needs to read ConfigMaps for function JARs
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+  # Runtime needs to read Secrets for config
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list"]
+  # Runtime can read its own pod info
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get"]
+  # Runtime can read KubeFn CRDs
+  - apiGroups: ["kubefn.com"]
+    resources: ["kubefngroups", "kubefnfunctions"]
+    verbs: ["get", "list", "watch"]
+  # Runtime can update KubeFn CRD status
+  - apiGroups: ["kubefn.com"]
+    resources: ["kubefngroups/status", "kubefnfunctions/status"]
+    verbs: ["patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "kubefn.fullname" . }}-runtime
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kubefn.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "kubefn.fullname" . }}-runtime
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "kubefn.fullname" . }}-runtime
+    namespace: {{ .Release.Namespace }}
+{{- end }}
