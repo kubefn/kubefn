@@ -2,6 +2,9 @@ package com.kubefn.runtime.server;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kubefn.runtime.heap.HeapExchangeImpl;
+import com.kubefn.runtime.memory.GCPressureMonitor;
+import com.kubefn.runtime.memory.GroupMemoryBudget;
+import com.kubefn.runtime.memory.MemoryCircuitBreaker;
 import com.kubefn.runtime.heap.HeapLifecycle;
 import com.kubefn.runtime.introspection.CausalCaptureEngine;
 import com.kubefn.runtime.introspection.ReplayEngine;
@@ -36,6 +39,9 @@ public class AdminHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
     private final PrometheusExporter prometheusExporter;
     private final HeapLifecycle heapLifecycle;
     private final SharedResourceManager resourceManager;
+    private final GroupMemoryBudget memoryBudget;
+    private final MemoryCircuitBreaker memoryBreaker;
+    private final GCPressureMonitor gcMonitor;
     private final AdminAuth auth;
     private byte[] traceUiHtml;
 
@@ -43,7 +49,9 @@ public class AdminHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
                         HeapExchangeImpl heapExchange, FunctionCircuitBreaker circuitBreaker,
                         CausalCaptureEngine captureEngine, ReplayEngine replayEngine,
                         PrometheusExporter prometheusExporter, HeapLifecycle heapLifecycle,
-                        SharedResourceManager resourceManager) {
+                        SharedResourceManager resourceManager,
+                        GroupMemoryBudget memoryBudget, MemoryCircuitBreaker memoryBreaker,
+                        GCPressureMonitor gcMonitor) {
         this.router = router;
         this.objectMapper = objectMapper;
         this.heapExchange = heapExchange;
@@ -53,6 +61,9 @@ public class AdminHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
         this.prometheusExporter = prometheusExporter;
         this.heapLifecycle = heapLifecycle;
         this.resourceManager = resourceManager;
+        this.memoryBudget = memoryBudget;
+        this.memoryBreaker = memoryBreaker;
+        this.gcMonitor = gcMonitor;
         this.auth = new AdminAuth();
         loadTraceUi();
     }
@@ -187,6 +198,15 @@ public class AdminHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
             case "/admin/lifecycle" -> responseBody = heapLifecycle.metrics();
 
             case "/admin/resources" -> responseBody = resourceManager.listResources();
+
+            case "/admin/memory" -> responseBody = memoryBudget != null
+                    ? memoryBudget.getStatus() : Map.of("error", "Memory budgets not enabled");
+
+            case "/admin/gc" -> responseBody = gcMonitor != null
+                    ? gcMonitor.getStatus() : Map.of("error", "GC monitor not enabled");
+
+            case "/admin/memory/breaker" -> responseBody = memoryBreaker != null
+                    ? memoryBreaker.getStatus() : Map.of("error", "Memory breaker not enabled");
 
             case "/admin/graph" -> {
                 var diagnostics = heapExchange.diagnostics();

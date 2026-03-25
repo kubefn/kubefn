@@ -9,6 +9,9 @@ import com.kubefn.runtime.introspection.CausalCaptureEngine;
 import com.kubefn.runtime.introspection.CausalEventRing;
 import com.kubefn.runtime.introspection.ReplayEngine;
 import com.kubefn.runtime.lifecycle.DrainManager;
+import com.kubefn.runtime.memory.GCPressureMonitor;
+import com.kubefn.runtime.memory.GroupMemoryBudget;
+import com.kubefn.runtime.memory.MemoryCircuitBreaker;
 import com.kubefn.runtime.metrics.KubeFnMetrics;
 import com.kubefn.runtime.metrics.PrometheusExporter;
 import com.kubefn.runtime.resilience.FallbackRegistry;
@@ -71,6 +74,20 @@ public class KubeFnMain {
             heapLifecycle.setDefaultTTL(Long.parseLong(defaultTTL));
         }
 
+        // ── Per-group memory budgets ──────────────────────────────
+        long defaultBudgetMB = Long.parseLong(System.getenv().getOrDefault(
+                "KUBEFN_GROUP_MEMORY_BUDGET_MB", "256"));
+        GroupMemoryBudget memoryBudget = new GroupMemoryBudget(defaultBudgetMB * 1024 * 1024);
+
+        // ── Memory circuit breaker ────────────────────────────────
+        long cooldownMs = Long.parseLong(System.getenv().getOrDefault(
+                "KUBEFN_MEMORY_BREAKER_COOLDOWN_MS", "30000"));
+        MemoryCircuitBreaker memoryBreaker = new MemoryCircuitBreaker(memoryBudget, cooldownMs);
+
+        // ── GC pressure monitor ───────────────────────────────────
+        GCPressureMonitor gcMonitor = new GCPressureMonitor(memoryBudget);
+        gcMonitor.start();
+
         // ── Shared resource manager (connection pools, HTTP clients) ──
         SharedResourceManager resourceManager = new SharedResourceManager();
 
@@ -97,7 +114,8 @@ public class KubeFnMain {
         // ── Admin server ────────────────────────────────────────
         startAdminServer(config, router, server.objectMapper(),
                 heapExchange, circuitBreaker, captureEngine, replayEngine,
-                prometheusExporter, heapLifecycle, resourceManager);
+                prometheusExporter, heapLifecycle, resourceManager,
+                memoryBudget, memoryBreaker, gcMonitor);
 
         // ── Load functions ──────────────────────────────────────
         if (Files.exists(config.functionsDir())) {
@@ -111,7 +129,15 @@ public class KubeFnMain {
         FunctionWatcher watcher = new FunctionWatcher(config.functionsDir(), loader);
         Thread.startVirtualThread(watcher);
 
+        // ── Wire memory breaker to classloader unload ────────────
+        memoryBreaker.setGroupUnloader(groupName -> {
+            log.warn("Memory breaker unloading group: {}", groupName);
+            router.unregisterGroup(groupName);
+        });
+
         log.info("KubeFn organism is ALIVE. {} routes registered.", router.routeCount());
+        log.info("Per-group memory budget: {}MB | Breaker cooldown: {}ms",
+                defaultBudgetMB, cooldownMs);
         log.info("Trace UI: http://localhost:{}/admin/ui", config.adminPort());
         log.info("Prometheus: http://localhost:{}/admin/prometheus", config.adminPort());
         log.info("Drop function JARs into {} to deploy.", config.functionsDir());
@@ -120,6 +146,7 @@ public class KubeFnMain {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             log.info("Shutdown signal received. Draining organism...");
             watcher.stop();
+            gcMonitor.stop();
             heapLifecycle.shutdown();
             resourceManager.shutdown();
             server.stop();
@@ -138,7 +165,10 @@ public class KubeFnMain {
                                          ReplayEngine replayEngine,
                                          PrometheusExporter prometheusExporter,
                                          HeapLifecycle heapLifecycle,
-                                         SharedResourceManager resourceManager)
+                                         SharedResourceManager resourceManager,
+                                         GroupMemoryBudget memoryBudget,
+                                         MemoryCircuitBreaker memoryBreaker,
+                                         GCPressureMonitor gcMonitor)
             throws InterruptedException {
         adminBossGroup = new NioEventLoopGroup(1);
         adminWorkerGroup = new NioEventLoopGroup(1);
@@ -155,7 +185,8 @@ public class KubeFnMain {
                         pipeline.addLast(new AdminHandler(
                                 router, objectMapper, heapExchange, circuitBreaker,
                                 captureEngine, replayEngine, prometheusExporter,
-                                heapLifecycle, resourceManager));
+                                heapLifecycle, resourceManager,
+                                memoryBudget, memoryBreaker, gcMonitor));
                     }
                 });
 
