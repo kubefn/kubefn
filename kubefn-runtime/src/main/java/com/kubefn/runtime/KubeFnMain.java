@@ -111,6 +111,11 @@ public class KubeFnMain {
                 drainManager, captureEngine, heapLifecycle);
         server.start();
 
+        // ── Promotion gate (evidence-based hot-swap validation) ──
+        var promotionGate = new com.kubefn.runtime.replay.PromotionGate(
+                server.captureStore(), router, server.objectMapper());
+        loader.setPromotionGate(promotionGate);
+
         // ── Admin server ────────────────────────────────────────
         startAdminServer(config, router, server.objectMapper(),
                 heapExchange, circuitBreaker, captureEngine, replayEngine,

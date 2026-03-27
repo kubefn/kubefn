@@ -277,6 +277,20 @@ public class AdminHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
                 }
             }
 
+            case "/admin/promote/status" -> {
+                if (captureStore != null && capturePolicy != null) {
+                    var gate = new com.kubefn.runtime.replay.PromotionGate(
+                            captureStore, router, objectMapper);
+                    responseBody = Map.of(
+                            "gate", gate.status(),
+                            "policy", capturePolicy.status(),
+                            "store", captureStore.status()
+                    );
+                } else {
+                    responseBody = Map.of("error", "Promotion gate not available");
+                }
+            }
+
             case "/admin/memory/breaker" -> responseBody = memoryBreaker != null
                     ? memoryBreaker.getStatus() : Map.of("error", "Memory breaker not enabled");
 

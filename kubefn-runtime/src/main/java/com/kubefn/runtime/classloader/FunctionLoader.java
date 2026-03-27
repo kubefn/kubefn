@@ -42,6 +42,7 @@ public class FunctionLoader {
     private final com.kubefn.runtime.resources.SharedResourceManager resourceManager;
     private final Map<String, FunctionGroupClassLoader> activeClassLoaders = new HashMap<>();
     private final Map<String, FunctionGroupContext> activeContexts = new HashMap<>();
+    private volatile com.kubefn.runtime.replay.PromotionGate promotionGate;
 
     public FunctionLoader(FunctionRouter router, HeapExchangeImpl heapExchange,
                           DrainManager drainManager,
@@ -136,9 +137,30 @@ public class FunctionLoader {
             log.info("Group '{}' loaded: rev={}, functions={}",
                     groupName, revisionId, context.functionRegistry().size());
 
+            // ── PromotionGate: post-deploy validation ──
+            if (promotionGate != null) {
+                try {
+                    for (var fnClass : context.functionRegistry().keySet()) {
+                        String fnName = fnClass.getSimpleName();
+                        var verdict = promotionGate.validate(fnName, revisionId);
+                        if (verdict.decision() == com.kubefn.runtime.replay.PromotionGate.Decision.BLOCK) {
+                            log.error("PROMOTION BLOCKED for {}: {}", fnName, verdict.summary());
+                            // In ENFORCING mode, unload the group and restore old
+                            // For now, just log — rollback is future work
+                        }
+                    }
+                } catch (Exception e) {
+                    log.warn("PromotionGate validation failed (non-blocking): {}", e.getMessage());
+                }
+            }
+
         } catch (Exception e) {
             log.error("Failed to load group: {}", groupName, e);
         }
+    }
+
+    public void setPromotionGate(com.kubefn.runtime.replay.PromotionGate gate) {
+        this.promotionGate = gate;
     }
 
     /**
