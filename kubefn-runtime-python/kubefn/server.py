@@ -27,6 +27,7 @@ from .introspection import CaptureEngine
 from .metrics import MetricsRecorder
 from .heap_guard import HeapGuard
 from .scheduler import SchedulerEngine
+from .invocation_capture import InvocationCapture, InvocationCaptureStore, CapturePolicy
 
 logger = logging.getLogger("kubefn.server")
 
@@ -48,6 +49,8 @@ class KubeFnHandler(BaseHTTPRequestHandler):
     heap_guard: HeapGuard = None
     scheduler: SchedulerEngine = None
     request_timeout_ms: int = 30_000
+    capture_store: InvocationCaptureStore = None
+    capture_policy: CapturePolicy = None
 
     def do_GET(self):
         self._handle_request("GET")
@@ -182,6 +185,25 @@ class KubeFnHandler(BaseHTTPRequestHandler):
                 if self.metrics_recorder:
                     self.metrics_recorder.record_invocation(func_key, duration_ms, error=False)
 
+                # ── Invocation capture ────────────────────────────────
+                if self.capture_store:
+                    cap = InvocationCapture(
+                        invocation_id=request_id,
+                        function_name=fn_meta.name,
+                        group_name=fn_meta.group,
+                        revision_id="py-rev-1",
+                        http_method=method,
+                        http_path=path,
+                        http_status=200,
+                        duration_ns=duration_ns,
+                        success=True,
+                    )
+                    if self.capture_policy and self.capture_policy.should_capture_value(
+                            fn_meta.name, False, duration_ns, len(body)):
+                        output_bytes = json.dumps(result, default=str).encode() if result else b""
+                        cap.set_value(body, output_bytes)
+                    self.capture_store.add(cap)
+
                 # Build response
                 response = result if isinstance(result, dict) else {"result": result}
                 response.setdefault("_meta", {}).update({
@@ -213,6 +235,17 @@ class KubeFnHandler(BaseHTTPRequestHandler):
                 if self.metrics_recorder:
                     self.metrics_recorder.record_invocation(func_key, duration_ms, error=True)
 
+                # Capture timeout as VALUE (always)
+                if self.capture_store:
+                    cap = InvocationCapture(
+                        invocation_id=request_id, function_name=fn_meta.name,
+                        group_name=fn_meta.group, http_method=method, http_path=path,
+                        http_status=504, duration_ns=duration_ns, success=False,
+                        error_message=str(e),
+                    )
+                    cap.set_value(body)
+                    self.capture_store.add(cap)
+
                 self._send_json(504, {
                     "error": str(e),
                     "function": func_key,
@@ -236,6 +269,17 @@ class KubeFnHandler(BaseHTTPRequestHandler):
                     self.circuit_breakers.record_failure(func_key)
                 if self.metrics_recorder:
                     self.metrics_recorder.record_invocation(func_key, duration_ms, error=True)
+
+                # Capture error as VALUE (always)
+                if self.capture_store:
+                    cap = InvocationCapture(
+                        invocation_id=request_id, function_name=fn_meta.name,
+                        group_name=fn_meta.group, http_method=method, http_path=path,
+                        http_status=500, duration_ns=duration_ns, success=False,
+                        error_message=str(e),
+                    )
+                    cap.set_value(body)
+                    self.capture_store.add(cap)
 
                 self._send_json(500, {
                     "error": str(e),
@@ -366,6 +410,32 @@ class KubeFnHandler(BaseHTTPRequestHandler):
                 else:
                     self._send_json(503, {"error": "Drain manager not enabled"})
 
+            case "/admin/captures":
+                if self.capture_store:
+                    limit = int(query_params.get("limit", "20"))
+                    level = query_params.get("level")
+                    if level == "value":
+                        caps = [c.to_dict() for c in self.capture_store.recent_values(limit)]
+                    else:
+                        caps = [c.to_dict() for c in self.capture_store.recent(limit)]
+                    self._send_json(200, {"captures": caps, "store": self.capture_store.status()})
+                else:
+                    self._send_json(503, {"error": "Capture store not enabled"})
+
+            case "/admin/captures/failures":
+                if self.capture_store:
+                    limit = int(query_params.get("limit", "20"))
+                    failures = [c.to_dict() for c in self.capture_store.failures(limit)]
+                    self._send_json(200, {"failures": failures, "count": len(failures)})
+                else:
+                    self._send_json(503, {"error": "Capture store not enabled"})
+
+            case "/admin/captures/policy":
+                if self.capture_policy:
+                    self._send_json(200, self.capture_policy.status())
+                else:
+                    self._send_json(503, {"error": "Capture policy not enabled"})
+
             case "/admin/status":
                 uptime = time.time() - KubeFnHandler.start_time
                 self._send_json(200, {
@@ -478,6 +548,8 @@ def run_server(
     KubeFnHandler.heap_guard = heap_guard
     KubeFnHandler.scheduler = scheduler
     KubeFnHandler.request_timeout_ms = request_timeout_ms
+    KubeFnHandler.capture_store = InvocationCaptureStore()
+    KubeFnHandler.capture_policy = CapturePolicy()
 
     # ── Load functions ────────────────────────────────────────────────
     loader = FunctionLoader(functions_dir, heap)

@@ -12,6 +12,7 @@
 
 import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
+import { InvocationCapture, InvocationCaptureStore, CapturePolicy } from './invocation-capture.js';
 
 const VERSION = '0.4.0';
 
@@ -39,6 +40,8 @@ export class KubeFnServer {
 
     this.requestTimeoutMs = opts.requestTimeoutMs || 30_000;
     this.startTime = Date.now();
+    this.captureStore = new InvocationCaptureStore();
+    this.capturePolicy = new CapturePolicy();
 
     this._server = createServer((req, res) => this._handleRequest(req, res));
   }
@@ -202,6 +205,20 @@ export class KubeFnServer {
         zeroCopy: true,
       });
 
+      // ── Invocation capture ──
+      const cap = new InvocationCapture(requestId, fn.name, fn.group);
+      cap.revisionId = `node-rev-${VERSION}`;
+      cap.httpMethod = method;
+      cap.httpPath = path;
+      cap.httpStatus = 200;
+      cap.durationNs = durationNs;
+      cap.success = true;
+      if (this.capturePolicy.shouldCaptureValue(fn.name, false, durationNs, body.length)) {
+        const outputBytes = Buffer.from(JSON.stringify(result));
+        cap.setValue(body, outputBytes);
+      }
+      this.captureStore.add(cap);
+
       sendJson(res, 200, response, {
         'X-KubeFn-Request-Id': requestId,
         'X-KubeFn-Runtime': `node-${VERSION}`,
@@ -218,6 +235,18 @@ export class KubeFnServer {
       this.captureEngine.captureRequestEnd(requestId, durationNs, e.message);
 
       console.error(`Function error: ${qualifiedName} [${requestId}]: ${e.message}`);
+
+      // ── Capture error as VALUE (always) ──
+      const errCap = new InvocationCapture(requestId, fn.name, fn.group);
+      errCap.revisionId = `node-rev-${VERSION}`;
+      errCap.httpMethod = method;
+      errCap.httpPath = path;
+      errCap.httpStatus = e.name === 'TimeoutError' ? 504 : 500;
+      errCap.durationNs = durationNs;
+      errCap.success = false;
+      errCap.errorMessage = e.message;
+      errCap.setValue(body);
+      this.captureStore.add(errCap);
 
       const status = e.name === 'TimeoutError' ? 504 : 500;
       sendJson(res, status, {
@@ -311,6 +340,28 @@ export class KubeFnServer {
     // GET /admin/drain
     if (path === '/admin/drain') {
       return sendJson(res, 200, this.drainManager.toJSON());
+    }
+
+    // GET /admin/captures
+    if (path === '/admin/captures') {
+      const limit = parseInt(url.searchParams.get('limit') || '20', 10);
+      const level = url.searchParams.get('level');
+      const caps = level === 'value'
+        ? this.captureStore.recentValues(limit)
+        : this.captureStore.recent(limit);
+      return sendJson(res, 200, { captures: caps.map(c => c.toJSON()), store: this.captureStore.status() });
+    }
+
+    // GET /admin/captures/failures
+    if (path === '/admin/captures/failures') {
+      const limit = parseInt(url.searchParams.get('limit') || '20', 10);
+      const failures = this.captureStore.failures(limit);
+      return sendJson(res, 200, { failures: failures.map(c => c.toJSON()), count: failures.length });
+    }
+
+    // GET /admin/captures/policy
+    if (path === '/admin/captures/policy') {
+      return sendJson(res, 200, this.capturePolicy.status());
     }
 
     // POST /admin/reload
