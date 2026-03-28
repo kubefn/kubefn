@@ -13,6 +13,7 @@
 import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { InvocationCapture, InvocationCaptureStore, CapturePolicy } from './invocation-capture.js';
+import { ReplayExecutor, PromotionGate } from './replay-engine.js';
 
 const VERSION = '0.4.0';
 
@@ -42,6 +43,8 @@ export class KubeFnServer {
     this.startTime = Date.now();
     this.captureStore = new InvocationCaptureStore();
     this.capturePolicy = new CapturePolicy();
+    this.replayExecutor = new ReplayExecutor(deps.loader, deps.heap);
+    this.promotionGate = new PromotionGate(this.captureStore, deps.loader, deps.heap);
 
     this._server = createServer((req, res) => this._handleRequest(req, res));
   }
@@ -362,6 +365,33 @@ export class KubeFnServer {
     // GET /admin/captures/policy
     if (path === '/admin/captures/policy') {
       return sendJson(res, 200, this.capturePolicy.status());
+    }
+
+    // GET/POST /admin/replay
+    if (path === '/admin/replay') {
+      const invId = url.searchParams.get('id');
+      if (invId) {
+        const cap = this.captureStore.findById(invId);
+        if (!cap) return sendJson(res, 404, { error: `Capture ${invId} not found` });
+        const result = await this.replayExecutor.replaySingle(cap);
+        return sendJson(res, 200, result);
+      } else {
+        const values = this.captureStore.recentValues(50);
+        const batch = await this.replayExecutor.replayBatch(values);
+        return sendJson(res, 200, batch);
+      }
+    }
+
+    // GET /admin/promote/status
+    if (path === '/admin/promote/status') {
+      return sendJson(res, 200, this.promotionGate.status());
+    }
+
+    // GET /admin/promote/:functionName
+    if (path.startsWith('/admin/promote/') && path !== '/admin/promote/status') {
+      const fnName = path.slice('/admin/promote/'.length);
+      const verdict = await this.promotionGate.validate(fnName, 'manual');
+      return sendJson(res, 200, verdict);
     }
 
     // POST /admin/reload

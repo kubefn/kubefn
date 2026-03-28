@@ -28,6 +28,7 @@ from .metrics import MetricsRecorder
 from .heap_guard import HeapGuard
 from .scheduler import SchedulerEngine
 from .invocation_capture import InvocationCapture, InvocationCaptureStore, CapturePolicy
+from .replay_engine import ReplayExecutor, PromotionGate
 
 logger = logging.getLogger("kubefn.server")
 
@@ -51,6 +52,8 @@ class KubeFnHandler(BaseHTTPRequestHandler):
     request_timeout_ms: int = 30_000
     capture_store: InvocationCaptureStore = None
     capture_policy: CapturePolicy = None
+    replay_executor: ReplayExecutor = None
+    promotion_gate: PromotionGate = None
 
     def do_GET(self):
         self._handle_request("GET")
@@ -436,6 +439,37 @@ class KubeFnHandler(BaseHTTPRequestHandler):
                 else:
                     self._send_json(503, {"error": "Capture policy not enabled"})
 
+            case "/admin/replay":
+                if self.replay_executor and self.capture_store:
+                    inv_id = query_params.get("id")
+                    if inv_id:
+                        cap = self.capture_store.find_by_id(inv_id)
+                        if cap:
+                            result = self.replay_executor.replay_single(cap)
+                            self._send_json(200, result.to_dict())
+                        else:
+                            self._send_json(404, {"error": f"Capture {inv_id} not found"})
+                    else:
+                        values = self.capture_store.recent_values(50)
+                        batch = self.replay_executor.replay_batch(values)
+                        self._send_json(200, batch.to_dict())
+                else:
+                    self._send_json(503, {"error": "Replay engine not enabled"})
+
+            case "/admin/promote/status":
+                if self.promotion_gate:
+                    self._send_json(200, self.promotion_gate.status())
+                else:
+                    self._send_json(503, {"error": "Promotion gate not enabled"})
+
+            case _ if path.startswith("/admin/promote/"):
+                fn_name = path.split("/admin/promote/", 1)[1]
+                if self.promotion_gate and fn_name:
+                    verdict = self.promotion_gate.validate(fn_name, "manual")
+                    self._send_json(200, verdict)
+                else:
+                    self._send_json(503, {"error": "Promotion gate not available"})
+
             case "/admin/status":
                 uptime = time.time() - KubeFnHandler.start_time
                 self._send_json(200, {
@@ -550,6 +584,8 @@ def run_server(
     KubeFnHandler.request_timeout_ms = request_timeout_ms
     KubeFnHandler.capture_store = InvocationCaptureStore()
     KubeFnHandler.capture_policy = CapturePolicy()
+    KubeFnHandler.replay_executor = ReplayExecutor(heap)
+    KubeFnHandler.promotion_gate = PromotionGate(KubeFnHandler.capture_store, heap)
 
     # ── Load functions ────────────────────────────────────────────────
     loader = FunctionLoader(functions_dir, heap)
