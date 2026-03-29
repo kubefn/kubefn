@@ -38,6 +38,9 @@ public class HeapExchangeImpl implements HeapExchange {
     // Smart error diagnostics — provides actionable messages on heap misses
     private volatile HeapDiagnostics diagnostics;
 
+    // Always-on heap trace — ring buffer of every publish/get/remove
+    private final HeapTrace heapTrace = new HeapTrace();
+
     // Counters
     private final AtomicLong publishCount = new AtomicLong(0);
     private final AtomicLong getCount = new AtomicLong(0);
@@ -118,6 +121,11 @@ public class HeapExchangeImpl implements HeapExchange {
             }
         }
 
+        // Heap trace: always-on operation log
+        var ctx = com.kubefn.runtime.lifecycle.RevisionContext.current();
+        heapTrace.recordPublish(key, type.getSimpleName(), group, function, version,
+                ctx != null ? ctx.requestId() : null);
+
         log.debug("HeapExchange: published '{}' (type={}, v={}, by={}.{})",
                 key, type.getSimpleName(), version, group, function);
 
@@ -143,6 +151,11 @@ public class HeapExchangeImpl implements HeapExchange {
                     captureEngine.captureHeapGet(ctx.requestId(), key, type.getSimpleName(), false);
                 }
             }
+            // Heap trace: record miss
+            var missCtx = com.kubefn.runtime.lifecycle.RevisionContext.current();
+            heapTrace.recordGet(key, type.getSimpleName(), group, function, 0,
+                    missCtx != null ? missCtx.requestId() : null, false);
+
             // Smart diagnostics: log actionable message for developers
             if (diagnostics != null) {
                 String diagnosis = diagnostics.diagnoseMiss(key, type.getSimpleName(), group, function);
@@ -177,6 +190,11 @@ public class HeapExchangeImpl implements HeapExchange {
                 captureEngine.captureHeapGet(reqId, key, type.getSimpleName(), true);
             }
         }
+
+        // Heap trace: record hit
+        var hitCtx = com.kubefn.runtime.lifecycle.RevisionContext.current();
+        heapTrace.recordGet(key, type.getSimpleName(), group, function, capsule.version(),
+                hitCtx != null ? hitCtx.requestId() : null, true);
 
         // Zero copy: return the SAME object reference
         return Optional.of((T) capsule.value());
@@ -214,6 +232,11 @@ public class HeapExchangeImpl implements HeapExchange {
                     captureEngine.captureHeapRemove(ctx.requestId(), key);
                 }
             }
+            // Heap trace: record remove
+            var rmCtx = com.kubefn.runtime.lifecycle.RevisionContext.current();
+            heapTrace.recordRemove(key, group, function,
+                    rmCtx != null ? rmCtx.requestId() : null);
+
             log.debug("HeapExchange: removed '{}' (was v{})", key, removed.version());
             return true;
         }
@@ -251,6 +274,7 @@ public class HeapExchangeImpl implements HeapExchange {
 
     public HeapGuard guard() { return guard; }
     public HeapAuditLog auditLog() { return auditLog; }
+    public HeapTrace trace() { return heapTrace; }
 
     private static String currentRevision() {
         var ctx = com.kubefn.runtime.lifecycle.RevisionContext.current();

@@ -770,21 +770,74 @@ cmd_top() {
     done
 }
 
-# ─── TRACE ──────────────────────────────────────────────────────
+# ─── TRACE (Heap Trace) ──────────────────────────────────────────
 cmd_trace() {
-    local request_id="${1:-}"
-    if [[ -z "$request_id" ]]; then
-        echo -e "${BOLD}Usage:${NC} kubefn trace <request-id>"
+    check_runtime
+    local filter="${1:-}"
+    local filter_type="${2:-}"
+
+    if [[ -z "$filter" ]]; then
+        echo -e "${BOLD}Heap Trace — recent operations${NC}"
         echo ""
-        echo "Get request IDs from the X-KubeFn-Request-Id response header:"
-        echo "  curl -v localhost:8080/greet 2>&1 | grep X-KubeFn-Request-Id"
-        exit 1
+        curl -sf "$(admin_url)/admin/heap/trace?limit=30" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+entries = data.get('entries', [])
+if not entries:
+    print('  No trace entries yet. Make some requests first.')
+    sys.exit(0)
+print(f'  {len(entries)} entries (of {data[\"trace\"][\"totalEntries\"]} total)')
+print()
+print(f'  {\"TIME\":<28} {\"OP\":<10} {\"KEY\":<25} {\"FUNCTION\":<25} {\"V\":>5}')
+print(f'  {\"─\"*28} {\"─\"*10} {\"─\"*25} {\"─\"*25} {\"─\"*5}')
+for e in entries:
+    t = e.get('time','')[:23]
+    op = e.get('op','')
+    key = e.get('key','')[:24]
+    fn = f\"{e.get('group','')}.{e.get('function','')}\"[:24]
+    v = e.get('version', 0)
+    color = '\033[32m' if 'PUBLISH' in op else '\033[36m' if 'HIT' in op else '\033[33m' if 'MISS' in op else '\033[31m'
+    print(f'  {t:<28} {color}{op:<10}\033[0m {key:<25} {fn:<25} {v:>5}')
+" 2>/dev/null || echo -e "${RED}Failed to fetch trace${NC}"
+        echo ""
+        echo -e "${CYAN}Usage:${NC}"
+        echo "  kubefn trace                     Recent heap operations"
+        echo "  kubefn trace --key pricing:current  History for a key"
+        echo "  kubefn trace --request <id>      Ops for a request"
+        echo "  kubefn trace --function TaxFn     Ops by a function"
+        return
     fi
 
-    echo -e "${BOLD}Trace: ${CYAN}${request_id}${NC}"
+    local url_param=""
+    case "$filter" in
+        --key)      url_param="key=$filter_type" ;;
+        --request)  url_param="request=$filter_type" ;;
+        --function) url_param="function=$filter_type" ;;
+        *)          url_param="request=$filter" ;;  # default: treat as request ID
+    esac
+
+    echo -e "${BOLD}Heap Trace — filtered by ${CYAN}${filter} ${filter_type:-$filter}${NC}"
     echo ""
-    echo -e "${YELLOW}Note: Full trace introspection available in v0.3${NC}"
-    echo "For now, check OpenTelemetry spans in your collector."
+    curl -sf "$(admin_url)/admin/heap/trace?${url_param}" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+entries = data.get('entries', [])
+if not entries:
+    print('  No matching entries.')
+    sys.exit(0)
+print(f'  {len(entries)} entries')
+print()
+print(f'  {\"TIME\":<28} {\"OP\":<10} {\"KEY\":<25} {\"FUNCTION\":<25} {\"V\":>5}')
+print(f'  {\"─\"*28} {\"─\"*10} {\"─\"*25} {\"─\"*25} {\"─\"*5}')
+for e in entries:
+    t = e.get('time','')[:23]
+    op = e.get('op','')
+    key = e.get('key','')[:24]
+    fn = f\"{e.get('group','')}.{e.get('function','')}\"[:24]
+    v = e.get('version', 0)
+    color = '\033[32m' if 'PUBLISH' in op else '\033[36m' if 'HIT' in op else '\033[33m' if 'MISS' in op else '\033[31m'
+    print(f'  {t:<28} {color}{op:<10}\033[0m {key:<25} {fn:<25} {v:>5}')
+" 2>/dev/null || echo -e "${RED}Failed to fetch trace${NC}"
 }
 
 # ─── LOGS ───────────────────────────────────────────────────────

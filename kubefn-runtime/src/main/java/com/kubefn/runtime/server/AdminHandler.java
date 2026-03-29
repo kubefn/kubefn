@@ -198,6 +198,45 @@ public class AdminHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
                         "keys", heapExchange.keys());
             }
 
+            case "/admin/heap/trace" -> {
+                var trace = heapExchange.trace();
+                String traceKey = parseParam(query, "key");
+                String traceReq = parseParam(query, "request");
+                String traceFunc = parseParam(query, "function");
+                int traceLimit = parseIntParam(query, "limit", 50);
+
+                java.util.List<?> entries;
+                if (traceKey != null) {
+                    entries = trace.forKey(traceKey).stream()
+                            .map(com.kubefn.runtime.heap.HeapTrace.TraceEntry::toMap).toList();
+                } else if (traceReq != null) {
+                    entries = trace.forRequest(traceReq).stream()
+                            .map(com.kubefn.runtime.heap.HeapTrace.TraceEntry::toMap).toList();
+                } else if (traceFunc != null) {
+                    entries = trace.forFunction(traceFunc).stream()
+                            .map(com.kubefn.runtime.heap.HeapTrace.TraceEntry::toMap).toList();
+                } else {
+                    entries = trace.recent(traceLimit).stream()
+                            .map(com.kubefn.runtime.heap.HeapTrace.TraceEntry::toMap).toList();
+                }
+                responseBody = Map.of("entries", entries, "count", entries.size(),
+                        "trace", trace.status());
+            }
+
+            case "/admin/heap/diff" -> {
+                var trace = heapExchange.trace();
+                String fromStr = parseParam(query, "from");
+                String toStr = parseParam(query, "to");
+                if (fromStr != null && toStr != null) {
+                    var from = java.time.Instant.parse(fromStr);
+                    var to = java.time.Instant.parse(toStr);
+                    responseBody = trace.snapshotDiff(from, to);
+                } else {
+                    responseBody = Map.of("error", "Provide ?from=ISO&to=ISO timestamps",
+                            "example", "/admin/heap/diff?from=2026-03-27T10:00:00Z&to=2026-03-27T10:05:00Z");
+                }
+            }
+
             case "/admin/breakers" -> responseBody = circuitBreaker.allStatus();
             case "/admin/metrics" -> responseBody = KubeFnMetrics.instance().snapshot();
 
